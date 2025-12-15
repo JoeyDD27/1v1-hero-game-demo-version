@@ -1,0 +1,49 @@
+# Godot-specific ignores
+.import/
+export.cfg
+export_presets.cfg
+
+# Imported translations (automatically generated from CSV files)
+*.translation
+
+# Mono-specific ignores (if using C#)
+.mono/
+data_*/
+mono_crash.*.json
+
+# System/IDE files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Godot-specific ignores
+.godot/
+
+# Build files
+*.exe
+*.app
+*.pck
+*.zip
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+tmp2/
+tmp3/
+*.tmp
+
+# UID files (Godot 4.x generates these)
+*.uid
+
+# Import files
+*.import
+
