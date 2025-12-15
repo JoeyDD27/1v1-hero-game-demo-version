@@ -1,0 +1,27 @@
+[gd_scene load_steps=2 format=3 uid="uid://d9l0m1n2o3p4q"]
+
+[ext_resource type="Script" path="res://scripts/core/Hero.gd" id="1_3"]
+
+[node name="Hero" type="CharacterBody2D"]
+collision_layer = 1
+collision_mask = 4
+script = ExtResource("1_3")
+
+[node name="Sprite" type="ColorRect" parent="."]
+layout_mode = 0
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 20.0
+color = Color(0.5, 0.5, 0.5, 1)
+
+[node name="HealthBar" type="Control" parent="."]
+layout_mode = 0
+offset_left = -25.0
+offset_top = -30.0
+offset_right = 25.0
+offset_bottom = -24.0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+transform = Transform2D(1, 0, 0, 1, 0, 0)
+
