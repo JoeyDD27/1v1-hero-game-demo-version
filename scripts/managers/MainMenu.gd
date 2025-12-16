@@ -10,7 +10,7 @@ extends Control
 
 var network_manager: Node
 var is_hosting: bool = false
-var is_connected: bool = false
+var player_connected: bool = false
 
 func _ready():
 	# NetworkManager is an autoload, access it directly
@@ -73,12 +73,16 @@ func _on_connect_pressed():
 
 func _on_start_pressed():
 	"""Start the battle"""
-	if is_connected:
-		get_tree().change_scene_to_file("res://scenes/BattleScene.tscn")
+	if player_connected:
+		# Server tells all clients to change scene via NetworkManager RPC
+		if multiplayer.is_server():
+			network_manager.change_to_battle_scene.rpc()
+		# Also change locally (for server)
+		network_manager.change_to_battle_scene()
 
 func _on_connection_succeeded():
 	"""Called when connection succeeds"""
-	is_connected = true
+	player_connected = true
 	
 	if is_hosting:
 		# Host waits for client
@@ -89,7 +93,7 @@ func _on_connection_succeeded():
 
 func _on_connection_failed():
 	"""Called when connection fails"""
-	is_connected = false
+	player_connected = false
 	status_label.text = "Connection failed!"
 	host_button.disabled = false
 	join_button.disabled = false
@@ -98,16 +102,16 @@ func _on_connection_failed():
 	ip_label.visible = false
 	start_button.visible = false
 
-func _on_peer_connected(peer_id: int):
+func _on_peer_connected(_peer_id: int):
 	"""Called when a peer connects"""
 	if multiplayer.is_server():
 		status_label.text = "Player connected! Ready to start."
 		start_button.visible = true
 		start_button.disabled = false
 
-func _on_peer_disconnected(peer_id: int):
+func _on_peer_disconnected(_peer_id: int):
 	"""Called when a peer disconnects"""
-	is_connected = false
+	player_connected = false
 	status_label.text = "Player disconnected!"
 	start_button.visible = false
 

@@ -98,3 +98,8 @@ func get_peer_count() -> int:
 		return 1  # Server counts as 1, will be 2 when client connects
 	return 0
 
+@rpc("any_peer", "call_local", "reliable")
+func change_to_battle_scene():
+	"""Changes scene to battle for all players"""
+	get_tree().change_scene_to_file("res://scenes/BattleScene.tscn")
+
