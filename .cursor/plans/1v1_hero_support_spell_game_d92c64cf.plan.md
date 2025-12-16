@@ -366,11 +366,20 @@ game_demo/
 - [ ] Implement 2 spells (Area Blast, Massive Buff)
   - [ ] Visual: Large colored circles (red/green)
   - [ ] R hotkey activation
+  - [ ] Cast at mouse location (instant cast)
+  - [ ] Area Blast: Cast at mouse location, instant damage
+  - [ ] Massive Buff: Cast at mouse location, affects player and supports in area
   - [ ] One-time use restriction
+  - [ ] Cooldown UI display
 - [ ] Implement hero death detection
-- [ ] Create hero switching UI (press 1/2/3 to select)
-- [ ] Add hero respawn system
-- [ ] Implement win condition (all heroes dead)
+- [ ] Create hero switching system (no switching before death, only on death)
+- [ ] Create hero switching overlay UI (press 1/2/3 to select, appears on death)
+- [ ] Add 5-second respawn delay (player can only select hero during this time)
+- [ ] Add hero respawn system (respawn at original spawn position)
+- [ ] Add 3-second spawn protection (invincibility after respawn)
+- [ ] Implement win condition (all 3 heroes dead)
+- [ ] Add match timer (10 minutes)
+- [ ] Add sudden death system (3.0x damage multiplier after 10 minutes)
 
 ### Phase 5: Pre-Battle & Polish
 
@@ -379,7 +388,8 @@ game_demo/
   - [ ] Auto-select all 3 supports (just confirm)
   - [ ] Choose 1 of 2 big spells (click button)
   - [ ] Quick Start option (skip selection)
-- [ ] Add obstacles to arena (2-3 rectangular blocks)
+- [ ] Add obstacles to arena (2-3 rectangular blocks with collision)
+- [ ] Add obstacle collision system (heroes, projectiles, abilities all blocked by obstacles) - ask Cursor: "Add collision detection so nothing can pass through obstacles"
 - [ ] Visual polish (ensure all blocks/circles, NO animations)
 - [ ] Victory/defeat screen
 - [ ] Add restart functionality
@@ -444,8 +454,9 @@ game_demo/
 **Tasks:**
 
 - [ ] Add hero health bars (colored rectangles above heroes) - ask Cursor: "Create HealthBar.gd script"
-- [ ] Implement auto-attack (heroes attack nearest enemy in range) - ask Cursor: "Add auto-attack to Hero.gd"
-- [ ] Add projectiles: Small colored circles that move toward target - ask Cursor: "Create Projectile.gd script"
+- [ ] Implement auto-attack (heroes attack nearest enemy in range, stops when out of range) - ask Cursor: "Add auto-attack to Hero.gd that targets nearest enemy and stops when out of range"
+- [ ] Add projectiles: Small colored circles that move in straight lines toward target - ask Cursor: "Create Projectile.gd script with straight-line movement"
+- [ ] Add collision system: Projectiles blocked by obstacles - ask Cursor: "Add obstacle collision to Projectile.gd"
 - [ ] Add damage system: Text numbers appear above damaged units (no animations, just instant text) - ask Cursor: "Create damage number popup system"
 - [ ] Create 2 abilities per hero (Q and E keys) - ask Cursor: "Add ability system to Hero.gd with Q/E hotkeys":
   - Fighter: Dash (instant movement), Shield Bash (damage circle)
@@ -468,13 +479,15 @@ game_demo/
 
 - [ ] Create base Support class - ask Cursor: "Create Support.gd with health, movement, and attack"
 - [ ] Implement 3 support types with visual blocks - ask Cursor: "Create Tank, DamageDealer, and Buffer support classes":
-  - **Tank Support**: Large gray/blue rectangle, high HP, follows player, attacks enemies, draws aggro
-  - **Damage Support**: Small red square, low HP, high damage, follows player, attacks enemies
-  - **Buffer Support**: Small yellow square with glow effect (colored outline), low HP, provides buffs to player, needs protection
+  - **Tank Support**: Large gray/blue rectangle, high HP, high melee damage, slow movement, follows player within close range, walks to nearest enemy
+  - **Damage Support**: Small red square, low HP, high damage, fast movement, follows player within medium range, attacks nearest enemy with projectiles
+  - **Buffer Support**: Small yellow square with glow effect (colored outline), low HP, very low damage, medium movement, follows player within medium range, provides buffs via fixed-radius aura around player
 - [ ] Add support summoning (hotkeys 1, 2, 3) - spawns at player location - ask Cursor: "Add support summoning to PlayerController.gd"
-- [ ] Basic AI: Follow player, attack nearest enemy, simple state machine - ask Cursor: "Create SimpleSupportAI.gd with follow and attack behavior"
+- [ ] Basic AI: Follow player within range, attack nearest enemy - ask Cursor: "Create SimpleSupportAI.gd with follow-within-range and attack-nearest-enemy behavior"
 - [ ] One-time use restriction (each support can only be summoned once, button grays out) - ask Cursor: "Add support usage tracking"
-- [ ] Support projectiles: Small colored circles (same as hero projectiles)
+- [ ] Support death handling (supports die = gone for match, no respawn) - ask Cursor: "Add support death handling that removes support permanently"
+- [ ] Buffer aura system (fixed radius around player) - ask Cursor: "Add buffer aura system with fixed radius around player"
+- [ ] Support projectiles: Small colored circles (same as hero projectiles, blocked by obstacles)
 - [ ] Test: Players can summon supports, supports fight and provide buffs
 
 #### Day 7: Pre-Battle Selection & Big Spell
@@ -493,10 +506,11 @@ game_demo/
 - [ ] Implement spell selection (choose 1 from 2 available - click button) - ask Cursor: "Add spell selection with 2 options"
 - [ ] Add "Quick Start" option (auto-selects all, skips selection entirely) - ask Cursor: "Add quick start button"
 - [ ] Implement 2 big spells - ask Cursor: "Create BigSpell.gd with Area Blast and Massive Buff":
-  - **Area Blast**: Large red circle appears, deals damage instantly, circle disappears
-  - **Massive Buff**: Large green circle appears, provides buffs, circle stays visible briefly then disappears
+  - **Area Blast**: Cast at mouse location, instant cast, large red circle appears, deals damage instantly, circle disappears after 0.5 seconds
+  - **Massive Buff**: Cast at mouse location, instant cast, large green circle appears, provides buffs to player and supports in area, circle stays visible for 3 seconds then disappears
 - [ ] Big spell visuals: Colored circles (red for damage, green for buff) - instant appearance, no animation
-- [ ] Add big spell hotkey (R) - one-time use, button grays out after use - ask Cursor: "Add R hotkey to PlayerController.gd"
+- [ ] Add big spell hotkey (R) - cast at mouse location, instant cast, one-time use, button grays out after use - ask Cursor: "Add R hotkey to PlayerController.gd that casts big spell at mouse location"
+- [ ] Add big spell cooldown UI - ask Cursor: "Add cooldown UI display for big spell"
 - [ ] Test: Selection works, spells work in battle
 
 #### Day 8: Hero Switching & Win Conditions
@@ -510,9 +524,14 @@ game_demo/
 **Tasks:**
 
 - [ ] Hero death detection - ask Cursor: "Add death detection to Hero.gd when health reaches 0"
-- [ ] Hero switching UI (simple: press 1, 2, or 3 to select next hero) - ask Cursor: "Create HeroSwitchingUI.gd with number key selection"
-- [ ] Hero respawn system - ask Cursor: "Add hero respawn at spawn point"
-- [ ] Win condition (all 3 heroes dead) - ask Cursor: "Add win condition check to BattleManager.gd"
+- [ ] Hero switching system (no switching before death) - ask Cursor: "Prevent hero switching before death"
+- [ ] Hero switching overlay UI (appears on death, press 1, 2, or 3 to select) - ask Cursor: "Create HeroSwitchingUI.gd overlay with number key selection that appears on hero death"
+- [ ] 5-second respawn delay (player can only select hero during this time) - ask Cursor: "Add 5-second respawn delay where player can only select hero"
+- [ ] Hero respawn system (respawn at original spawn position) - ask Cursor: "Add hero respawn at original spawn point"
+- [ ] 3-second spawn protection (invincibility after respawn) - ask Cursor: "Add 3-second invincibility after hero respawn"
+- [ ] Win condition (all 3 heroes dead) - ask Cursor: "Add win condition check to BattleManager.gd when all 3 heroes are dead"
+- [ ] Match timer (10 minutes) - ask Cursor: "Add 10-minute match timer"
+- [ ] Sudden death system (3.0x damage multiplier after 10 minutes) - ask Cursor: "Add sudden death system that applies 3.0x damage multiplier to all heroes after 10 minutes"
 - [ ] Victory/defeat screen - ask Cursor: "Create victory/defeat screen UI"
 - [ ] Test: Full gameplay loop works
 
@@ -586,49 +605,214 @@ game_demo/
 **Support 1: Tank**
 
 - Visual: Large gray/blue rectangle (bigger than heroes)
-- High HP, low damage, slow movement
-- Behavior: Follows player, attacks nearest enemy, draws aggro (enemies prioritize tank)
-- Projectiles: Small gray circles (weak)
-- Role: Protects player, soaks damage
+- High HP, high melee damage, slow movement
+- Behavior: Follows player within close range, walks to nearest enemy and attacks (no taunt, just high damage and slow speed)
+- Projectiles: Small gray circles (weak) or melee attacks
+- Role: Protects player, soaks damage, high melee damage
 - Summon: Press 1
+- Death: Gone for match when killed
 
 **Support 2: Damage Dealer**
 
 - Visual: Small red square (smaller than heroes)
 - Low HP, high damage, fast movement
-- Behavior: Follows player, attacks nearest enemy
-- Projectiles: Small red circles (strong)
+- Behavior: Follows player within medium range, attacks nearest enemy with projectiles
+- Projectiles: Small red circles (strong, travel straight, blocked by obstacles)
 - Role: High DPS, needs player protection
 - Summon: Press 2
+- Death: Gone for match when killed
 
 **Support 3: Buffer**
 
 - Visual: Small yellow square with yellow outline/glow (same size as damage dealer)
 - Low HP, very low damage, medium movement
-- Behavior: Follows player, provides attack speed/damage buffs (aura effect - colored circle around player)
+- Behavior: Follows player within medium range, provides attack speed/damage buffs via fixed-radius aura around player (not around buffer)
 - Projectiles: None or very weak
 - Role: Provides buffs, very fragile, needs protection
 - Summon: Press 3
+- Death: Gone for match when killed
+- Aura: Fixed radius around player (colored circle visual indicator)
 
 ### 2 Big Spells (Choose 1)
 
 **Spell 1: Area Blast**
 
-- Visual: Large red circle appears instantly around caster, disappears after 0.5 seconds
+- Visual: Large red circle appears instantly at cast location, disappears after 0.5 seconds
 - Effect: Deals heavy damage to all enemies in large circle
 - One-time use (button grays out after use)
 - Activation: Press R key
 - Use: Clear supports instantly or finish off low-health heroes
 - No animation - circle appears, damage applies, circle disappears
+- **Casting**: Cast at mouse location (instant cast)
+- **Cooldown UI**: Shows cooldown status when available/used
 
 **Spell 2: Massive Buff**
 
-- Visual: Large green circle appears instantly around caster, stays visible for 3 seconds, then disappears
+- Visual: Large green circle appears instantly at cast location, stays visible for 3 seconds, then disappears
 - Effect: Provides huge damage/attack speed buff to player and supports in circle
 - One-time use (button grays out after use)
 - Activation: Press R key
 - Use: Turn the tide of battle, make hero temporarily overpowered
 - No animation - circle appears, buff applies, circle fades out
+- **Casting**: Cast at mouse location (instant cast)
+- **Affects**: Player and supports within the circle (supports that enter later also get buff)
+- **Cooldown UI**: Shows cooldown status when available/used
+
+## Game Design Details & Mechanics
+
+### Match Rules & Timing
+
+- **Hero Respawn Delay**: 5 seconds after hero death
+- **Match Time Limit**: 10 minutes
+- **Sudden Death**: After 10 minutes, all heroes receive a 3.0x damage multiplier
+- **Win Condition**: All 3 heroes of one player must be eliminated (all heroes dead)
+
+### Combat & Auto-Attack System
+
+**Auto-Attack Behavior**:
+
+- **Target Selection**: Always targets nearest enemy within attack range
+- **Range Behavior**: Auto-attack stops when target moves out of range
+- **Projectile Movement**: Projectiles travel in straight lines toward target
+- **Collision**: Nothing can pass through obstacles (heroes, projectiles, abilities all blocked by obstacles)
+
+**Combat Flow**:
+
+- Heroes automatically attack nearest enemy when in range
+- Attack stops if enemy moves out of range
+- Projectiles are blocked by obstacles (walls/obstacles)
+- Heroes cannot walk through obstacles
+
+### Support AI Behavior
+
+**Follow Behavior**:
+
+- **Follow Distance**: Supports stay within a specific range of the player (different ranges for different support types)
+  - Tank: Closer follow range (stays near player)
+  - Damage Dealer: Medium follow range
+  - Buffer: Medium follow range
+
+**Attack Behavior**:
+
+- **Target Priority**: Always targets nearest enemy
+- **Tank Support**: High melee damage, slow movement speed, walks directly to nearest enemy (no taunt mechanic, just high damage and slow speed)
+- **Damage Dealer**: Attacks nearest enemy with ranged projectiles
+- **Buffer**: Provides buffs, attacks rarely or with very weak projectiles
+
+**Buffer Aura**:
+
+- **Aura Radius**: Fixed radius around the player (not around the buffer itself)
+- **Effect**: Provides attack speed/damage buffs to player within aura radius
+- **Visual**: Colored circle around player indicates aura effect
+
+**Support Death**:
+
+- **Permanent**: When a support dies, it is gone for the rest of the match
+- **No Respawn**: Supports cannot be resummoned once dead
+- **One-Time Use**: Each support can only be summoned once per match
+
+### Hero Switching & Respawn System
+
+**Hero Switching Rules**:
+
+- **No Pre-Death Switching**: Players cannot switch heroes before death
+- **Death Required**: Hero switching only occurs when current hero dies
+
+**Death & Respawn Flow**:
+
+1. Hero dies (health reaches 0)
+2. **5 Second Respawn Delay**: Player cannot do anything except select next hero
+3. **Selection Overlay**: Hero selection UI appears as overlay (press 1, 2, or 3 to select)
+4. **Respawn Location**: Hero respawns at original spawn position (not where they died)
+5. **Spawn Protection**: 3 seconds of invincibility after respawn (cannot take damage)
+
+**Selection UI**:
+
+- **Overlay Display**: Hero selection UI appears as overlay during gameplay (does not pause game)
+- **Input**: Press 1, 2, or 3 to select next hero
+- **Time Limit**: Must select within 5 seconds (respawn delay)
+- **Visual**: Shows available heroes with numbers 1, 2, 3
+
+### Big Spell Mechanics
+
+**Area Blast**:
+
+- **Casting**: Cast at mouse location (click where you want the spell)
+- **Cast Type**: Instant cast (no channel time)
+- **Effect**: Large red circle appears instantly, deals damage to all enemies in area
+- **Visual Duration**: Circle disappears after 0.5 seconds
+- **Cooldown UI**: Shows spell status (available/used/cooldown)
+
+**Massive Buff**:
+
+- **Casting**: Cast at mouse location (click where you want the buff area)
+- **Cast Type**: Instant cast (no channel time)
+- **Effect**: Large green circle appears, provides damage/attack speed buff
+- **Affects**: Player and all supports within the circle (supports that enter later also receive buff)
+- **Visual Duration**: Circle stays visible for 3 seconds, then disappears
+- **Cooldown UI**: Shows spell status (available/used/cooldown)
+
+### Hero Abilities (Demo Design)
+
+**Note**: For demo purposes, ability mechanics can be designed flexibly. Below are suggested implementations:
+
+**Fighter Abilities**:
+
+- **Q - Dash**: Instant movement ability (can be click-to-dash or dash toward mouse)
+- **E - Shield Bash**: Area damage around hero or at target location
+
+**Shooter Abilities**:
+
+- **Q - Rapid Fire**: Temporary attack speed buff (self-buff, visual indicator)
+- **E - Piercing Shot**: Line projectile that hits multiple enemies
+
+**Mage Abilities**:
+
+- **Q - Fireball**: Area damage at target location
+- **E - Teleport**: Instant movement to nearby location
+
+**Ability Design Flexibility**: Since this is a demo, ability mechanics can be adjusted during development for best gameplay feel.
+
+### Obstacle & Collision System
+
+**Obstacles**:
+
+- **Type**: Rectangular blocks (gray/colored)
+- **Collision**: Solid - nothing can pass through
+- **Blocked Entities**: Heroes, projectiles, abilities all blocked by obstacles
+- **Placement**: 2-3 obstacles placed strategically in arena
+
+**Arena Boundaries**:
+
+- **Walls**: Invisible or visible boundaries prevent heroes from leaving arena
+- **Collision**: Heroes cannot walk outside arena bounds
+
+### Visual Feedback & UI
+
+**Damage Numbers**:
+
+- **Display**: Text numbers appear above damaged units
+- **Behavior**: Can fade out or disappear instantly (no animation requirement)
+
+**Health Bars**:
+
+- **Display**: Always visible above units (or only when damaged - flexible for demo)
+- **Visual**: Colored rectangles (green/red) showing health percentage
+
+**Ability Cooldowns**:
+
+- **Display**: Cooldown UI shows ability status
+- **Format**: Numbers, progress bars, or both (flexible for demo)
+
+**Support Indicators**:
+
+- **Display**: Visual indicator showing which supports are available/used
+- **Format**: Colored rectangles or icons for each support (1, 2, 3)
+
+**Big Spell Cooldown**:
+
+- **Display**: Cooldown UI shows big spell status (available/used)
+- **Visual**: Button or indicator shows when spell is ready
 
 ## Easy Testing Setup (2 Separate Computers on Same WiFi)
 

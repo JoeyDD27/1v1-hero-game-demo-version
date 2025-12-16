@@ -1,0 +1,24 @@
+[gd_scene load_steps=2 format=3 uid="uid://d9l0y3n6o4q2r"]
+
+[ext_resource type="Script" path="res://scripts/managers/BattleManager.gd" id="1"]
+
+[node name="BattleScene" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.2, 0.2, 0.3, 1)
+
+[node name="SpawnPoint1" type="Marker2D" parent="."]
+transform = Transform2D(1, 0, 0, 1, 200, 540)
+
+[node name="SpawnPoint2" type="Marker2D" parent="."]
+transform = Transform2D(1, 0, 0, 1, 1720, 540)
+
+[node name="Heroes" type="Node2D" parent="."]
+

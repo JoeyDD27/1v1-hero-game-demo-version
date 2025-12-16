@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3 uid="uid://c8k9x2m5n3p1q"]
+
+[ext_resource type="Script" path="res://scripts/core/Hero.gd" id="1"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_1"]
+radius = 20.0
+
+[node name="Hero" type="CharacterBody2D"]
+script = ExtResource("1")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+transform = Transform2D(1, 0, 0, 1, 0, 0)
+shape = SubResource("CircleShape2D_1")
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0, 0, 1, 1)
+polygon = PackedVector2Array(20, 0, 19.6, 3.9, 18.48, 7.65, 16.63, 11.11, 14.14, 14.14, 11.11, 16.63, 7.65, 18.48, 3.9, 19.6, 0, 20, -3.9, 19.6, -7.65, 18.48, -11.11, 16.63, -14.14, 14.14, -16.63, 11.11, -18.48, 7.65, -19.6, 3.9, -20, 0, -19.6, -3.9, -18.48, -7.65, -16.63, -11.11, -14.14, -14.14, -11.11, -16.63, -7.65, -18.48, -3.9, -19.6, 0, -20, 3.9, -19.6, 7.65, -18.48, 11.11, -16.63, 14.14, -14.14, 16.63, -11.11, 18.48, -7.65, 19.6, -3.9)
+
