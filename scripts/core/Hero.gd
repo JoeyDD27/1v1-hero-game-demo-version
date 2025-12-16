@@ -38,12 +38,22 @@ func _ready():
 			points.append(Vector2(cos(angle) * radius, sin(angle) * radius))
 		visual.polygon = points
 		add_child(visual)
+	
+	# Initialize network position to current position
+	network_position = position
+	
+	# Sync initial position to all peers after a short delay
+	if is_multiplayer_authority() and multiplayer.multiplayer_peer != null:
+		await get_tree().create_timer(0.1).timeout
+		sync_position.rpc(position)
 
 func _physics_process(delta):
 	# Only process movement if this is the local player's hero
 	if not is_multiplayer_authority():
-		# Interpolate network position
-		position = position.lerp(network_position, 0.3)
+		# Interpolate network position smoothly
+		# Only interpolate if we have a valid network position
+		if network_position.distance_to(Vector2.ZERO) > 1.0 or position.distance_to(Vector2.ZERO) < 1.0:
+			position = position.lerp(network_position, 0.5)
 		return
 	
 	# Handle movement
@@ -99,6 +109,9 @@ func sync_position(pos: Vector2):
 	"""Syncs position across network"""
 	if not is_multiplayer_authority():
 		network_position = pos
+		# Immediately snap to position if it's way off (initial sync or teleport)
+		if position.distance_to(pos) > 200:
+			position = pos
 
 func set_player_id(id: int):
 	"""Sets the player ID and updates visual"""

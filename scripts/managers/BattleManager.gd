@@ -18,13 +18,13 @@ func _ready():
 	# If no spawn points found, create default ones
 	if spawn_points.is_empty():
 		var spawn1 = Marker2D.new()
-		spawn1.position = Vector2(200, 540)
+		spawn1.position = Vector2(300, 540)  # Left side, visible on screen
 		spawn1.name = "SpawnPoint1"
 		add_child(spawn1)
 		spawn_points.append(spawn1)
 		
 		var spawn2 = Marker2D.new()
-		spawn2.position = Vector2(1720, 540)
+		spawn2.position = Vector2(1620, 540)  # Right side, visible on screen
 		spawn2.name = "SpawnPoint2"
 		add_child(spawn2)
 		spawn_points.append(spawn2)
@@ -77,6 +77,11 @@ func spawn_hero_for_peer(peer_id: int):
 		add_child(hero, true)
 	
 	heroes[peer_id] = hero
+	
+	# Sync initial position immediately after spawning
+	if hero.is_multiplayer_authority():
+		await get_tree().process_frame
+		hero.sync_position.rpc(spawn_point.position)
 	
 	print("Spawned hero for peer ", peer_id, " at ", spawn_point.position)
 

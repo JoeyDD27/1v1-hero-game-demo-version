@@ -1,6 +1,9 @@
-[gd_scene load_steps=2 format=3 uid="uid://d9l0y3n6o4q2r"]
+[gd_scene load_steps=3 format=3 uid="uid://d9l0y3n6o4q2r"]
 
 [ext_resource type="Script" path="res://scripts/managers/BattleManager.gd" id="1"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_1"]
+size = Vector2(1920, 1080)
 
 [node name="BattleScene" type="Node2D"]
 script = ExtResource("1")
@@ -14,11 +17,24 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.2, 0.2, 0.3, 1)
 
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(960, 540)
+limit_left = 0
+limit_top = 0
+limit_right = 1920
+limit_bottom = 1080
+
+[node name="ArenaBounds" type="StaticBody2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ArenaBounds"]
+shape = SubResource("RectangleShape2D_1")
+position = Vector2(960, 540)
+
 [node name="SpawnPoint1" type="Marker2D" parent="."]
-transform = Transform2D(1, 0, 0, 1, 200, 540)
+transform = Transform2D(1, 0, 0, 1, 300, 540)
 
 [node name="SpawnPoint2" type="Marker2D" parent="."]
-transform = Transform2D(1, 0, 0, 1, 1720, 540)
+transform = Transform2D(1, 0, 0, 1, 1620, 540)
 
 [node name="Heroes" type="Node2D" parent="."]
 
