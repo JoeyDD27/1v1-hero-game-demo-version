@@ -144,4 +144,3 @@ func set_player_id(id: int):
 		var visual = get_node("Visual")
 		if visual is Polygon2D:
 			visual.color = color
-
