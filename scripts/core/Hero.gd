@@ -274,13 +274,13 @@ func _process_local_movement(delta):
 	position.y = clamp(position.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 	
 	# Handle attack input
-	if Input.is_action_just_pressed("attack") and attack_cooldown <= 0.0:
+	if InputMap.has_action("attack") and Input.is_action_just_pressed("attack") and attack_cooldown <= 0.0:
 		attack_toward_mouse()
 	
 	# Handle ability inputs
-	if Input.is_action_just_pressed("ability_q") and ability_q_cooldown <= 0.0:
+	if InputMap.has_action("ability_q") and Input.is_action_just_pressed("ability_q") and ability_q_cooldown <= 0.0:
 		use_ability_q()
-	if Input.is_action_just_pressed("ability_e") and ability_e_cooldown <= 0.0:
+	if InputMap.has_action("ability_e") and Input.is_action_just_pressed("ability_e") and ability_e_cooldown <= 0.0:
 		use_ability_e()
 	
 	# Sync position over network
@@ -436,17 +436,20 @@ func attack_toward_mouse():
 	# Set attack cooldown
 	attack_cooldown = 1.0 / attack_speed
 	
-	# Network sync attack
-	perform_attack.rpc(attack_dir)
+	# Network sync attack - execute on authority
+	if multiplayer.multiplayer_peer != null:
+		# Call RPC which will execute on authority (local if we're authority, remote if not)
+		perform_attack.rpc(attack_dir)
+	else:
+		# Single player mode - execute directly
+		perform_attack(attack_dir)
 
-@rpc("any_peer", "call_local", "reliable")
+@rpc("authority", "call_local", "reliable")
 func perform_attack(direction: Vector2):
-	"""Perform attack in given direction"""
-	# Safety check: ensure multiplayer is active
-	if multiplayer.multiplayer_peer == null:
-		return
-	if not is_multiplayer_authority():
-		return  # Only process on authority
+	"""Perform attack in given direction - only executes on authority"""
+	# This RPC only executes on the authority (the owner of this hero)
+	# In multiplayer, if caller is authority, executes locally
+	# In single player, executes directly
 	
 	match hero_type:
 		"Fighter":
@@ -516,6 +519,10 @@ func use_ability_q():
 	if is_dead or ability_q_cooldown > 0.0:
 		return
 	
+	# Only execute on authority (the owner of this hero)
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
+		return
+	
 	match hero_type:
 		"Fighter":
 			ability_dash()
@@ -525,11 +532,17 @@ func use_ability_q():
 			ability_fireball()
 	
 	ability_q_cooldown = ability_q_max_cooldown
-	use_ability.rpc("q")
+	# Network sync ability - visual sync only
+	if multiplayer.multiplayer_peer != null:
+		use_ability.rpc("q")
 
 func use_ability_e():
 	"""Use E ability"""
 	if is_dead or ability_e_cooldown > 0.0:
+		return
+	
+	# Only execute on authority (the owner of this hero)
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
 		return
 	
 	match hero_type:
@@ -541,16 +554,17 @@ func use_ability_e():
 			ability_teleport()
 	
 	ability_e_cooldown = ability_e_max_cooldown
-	use_ability.rpc("e")
+	# Network sync ability - visual sync only
+	if multiplayer.multiplayer_peer != null:
+		use_ability.rpc("e")
 
 @rpc("any_peer", "call_local", "reliable")
 func use_ability(ability: String):
-	"""Network sync for ability usage"""
-	# Safety check: ensure multiplayer is active
-	if multiplayer.multiplayer_peer == null:
-		return
-	if not is_multiplayer_authority():
-		return  # Visual effects only on non-authority
+	"""Network sync for ability usage - visual sync only"""
+	# This RPC is for visual synchronization only
+	# The actual ability execution happens locally in use_ability_q/use_ability_e
+	# which are called before this RPC
+	pass
 
 # Fighter Abilities
 func ability_dash():
