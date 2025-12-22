@@ -78,4 +78,3 @@ func _check_collisions():
 					body.take_damage(damage)
 					queue_free()
 					return
-

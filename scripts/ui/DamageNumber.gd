@@ -30,4 +30,3 @@ func _process(delta):
 	if lifetime < fade_time:
 		var alpha = lifetime / fade_time
 		modulate.a = alpha
-

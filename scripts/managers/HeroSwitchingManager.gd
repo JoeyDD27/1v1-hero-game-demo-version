@@ -29,7 +29,7 @@ func register_player_heroes(player_id: int, heroes_array: Array):
 				heroes_array[i].set_process(false)
 				heroes_array[i].set_physics_process(false)
 	
-	dead_heroes[player_id] = Array[String]()
+	dead_heroes[player_id] = []
 
 func on_hero_died(player_id: int, hero_node):
 	"""Handle hero death"""
@@ -38,7 +38,7 @@ func on_hero_died(player_id: int, hero_node):
 	
 	# Ensure dead_heroes array exists and is properly typed
 	if not dead_heroes.has(player_id):
-		dead_heroes[player_id] = Array[String]()
+		dead_heroes[player_id] = []
 	
 	# Add to dead heroes
 	var hero_type = hero_node.hero_type
@@ -67,7 +67,7 @@ func show_selection_ui(player_id: int):
 	
 	# Ensure dead_heroes array exists and is properly typed
 	if not dead_heroes.has(player_id):
-		dead_heroes[player_id] = Array[String]()
+		dead_heroes[player_id] = []
 	
 	var selection_ui = get_tree().get_first_node_in_group("hero_selection_ui")
 	if selection_ui and selection_ui.has_method("show_selection"):
