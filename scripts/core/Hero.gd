@@ -58,6 +58,10 @@ func _physics_process(delta):
 		# Only interpolate if we have a valid network position
 		if network_position.distance_to(Vector2.ZERO) > 1.0 or position.distance_to(Vector2.ZERO) < 1.0:
 			position = position.lerp(network_position, 0.5)
+			# Clamp network-synced position to bounds too
+			var hero_radius = 30.0
+			position.x = clamp(position.x, hero_radius, 1920 - hero_radius)
+			position.y = clamp(position.y, hero_radius, 1080 - hero_radius)
 		return
 	
 	# Handle movement
@@ -66,7 +70,12 @@ func _physics_process(delta):
 	# Right-click movement (MOBA style) - takes priority
 	if Input.is_action_just_pressed("right_click"):
 		var mouse_pos = get_global_mouse_position()
-		target_position = mouse_pos
+		# Clamp target to screen bounds
+		var hero_radius = 30.0
+		target_position = Vector2(
+			clamp(mouse_pos.x, hero_radius, 1920 - hero_radius),
+			clamp(mouse_pos.y, hero_radius, 1080 - hero_radius)
+		)
 		has_target = true
 	
 	# Move toward target if set (right-click movement)
@@ -101,6 +110,11 @@ func _physics_process(delta):
 	# Apply movement
 	velocity = movement * speed
 	move_and_slide()
+	
+	# Clamp position to screen bounds (with hero radius padding)
+	var hero_radius = 30.0
+	position.x = clamp(position.x, hero_radius, 1920 - hero_radius)
+	position.y = clamp(position.y, hero_radius, 1080 - hero_radius)
 	
 	# Sync position over network
 	network_update_timer += delta

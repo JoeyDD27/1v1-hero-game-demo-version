@@ -51,8 +51,8 @@ func _ready():
 		await get_tree().create_timer(0.5).timeout
 		spawn_all_heroes()
 	else:
-		# Client waits for server to spawn their hero
-		# Don't spawn locally - let server handle it
+		# Client waits a moment then requests spawn
+		await get_tree().create_timer(0.2).timeout
 		request_hero_spawn.rpc_id(1)
 
 func _on_peer_connected(peer_id: int):
@@ -88,7 +88,11 @@ func spawn_hero_for_peer(peer_id: int):
 	hero.position = spawn_point.position
 	hero.name = "Hero_" + str(peer_id)
 	
-	# Add to scene tree FIRST so _ready() is called
+	# Set player ID and authority BEFORE adding to scene tree
+	hero.set_player_id(peer_id)
+	hero.set_multiplayer_authority(peer_id)
+	
+	# Add to scene tree with proper replication
 	var heroes_node = get_node_or_null("Heroes")
 	if heroes_node:
 		heroes_node.add_child(hero, true)
@@ -98,10 +102,6 @@ func spawn_hero_for_peer(peer_id: int):
 	# Wait for hero to be fully initialized
 	await get_tree().process_frame
 	await get_tree().process_frame
-	
-	# Now set player ID and authority (after _ready() has run)
-	hero.set_player_id(peer_id)
-	hero.set_multiplayer_authority(peer_id)
 	
 	heroes[peer_id] = hero
 	
@@ -136,4 +136,3 @@ func request_hero_spawn():
 		if requesting_peer != 0 and not heroes.has(requesting_peer):
 			connected_peers.append(requesting_peer)
 			spawn_hero_for_peer(requesting_peer)
-

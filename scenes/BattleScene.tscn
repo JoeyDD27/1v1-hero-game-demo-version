@@ -24,11 +24,9 @@ limit_top = 0
 limit_right = 1920
 limit_bottom = 1080
 
-[node name="ArenaBounds" type="StaticBody2D" parent="."]
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="ArenaBounds"]
-shape = SubResource("RectangleShape2D_1")
-position = Vector2(960, 540)
+[node name="ArenaBounds" type="Area2D" parent="."]
+monitorable = false
+monitoring = false
 
 [node name="SpawnPoint1" type="Marker2D" parent="."]
 transform = Transform2D(1, 0, 0, 1, 300, 540)
