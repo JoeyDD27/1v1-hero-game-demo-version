@@ -1,5 +1,5 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1766386670
+::res://::1766387232
 icon.svg::CompressedTexture2D::2595000385491246249::1765869499::1765870315::1::::<><><>0<>0<>f9d8d6396481432c58535f37e27c6374<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 ::res://assets/::1765869222
 ::res://assets/fonts/::1765869222
@@ -18,7 +18,7 @@ HeroSelectionUI.tscn::PackedScene::6887951432235820348::1766384132::0::1::::<><>
 ::res://scripts/controllers/::1765870315
 PlayerController.gd::GDScript::5595139781192088422::1765869499::0::1::::<>Node<><>0<>0<><>::
 ::res://scripts/core/::1766384235
-Hero.gd::GDScript::8111363418764293292::1766386275::0::1::::<>CharacterBody2D<><>0<>0<><>::
+Hero.gd::GDScript::8111363418764293292::1766387121::0::1::::<>CharacterBody2D<><>0<>0<><>::
 Projectile.gd::GDScript::3147358139763732785::1766384132::0::1::::<>CharacterBody2D<><>0<>0<><>::
 ::res://scripts/managers/::1766384235
 BattleManager.gd::GDScript::4580873068196942363::1766384132::0::1::::<>Node2D<><>0<>0<><>::

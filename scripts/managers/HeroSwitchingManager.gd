@@ -28,7 +28,7 @@ func register_player_heroes(player_id: int, heroes_array: Array):
 				heroes_array[i].set_process(false)
 				heroes_array[i].set_physics_process(false)
 	
-	dead_heroes[player_id] = []
+	dead_heroes[player_id] = Array[String]()
 
 func on_hero_died(player_id: int, hero_node):
 	"""Handle hero death"""
