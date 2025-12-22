@@ -1,0 +1,3 @@
+res://scenes/Hero.tscn
+res://scripts/core/Hero.gd
+res://scripts/managers/BattleManager.gd

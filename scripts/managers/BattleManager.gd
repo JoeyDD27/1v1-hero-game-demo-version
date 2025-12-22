@@ -14,7 +14,7 @@ func _ready():
 	# Make sure camera is current
 	var camera = get_node_or_null("Camera2D")
 	if camera:
-		camera.current = true
+		camera.make_current()
 	
 	# Connect to multiplayer signals to track peers
 	multiplayer.peer_connected.connect(_on_peer_connected)
