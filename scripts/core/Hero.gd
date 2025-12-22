@@ -124,7 +124,10 @@ func _on_health_changed(new_health: float, max_hp: float):
 		if position != Vector2.ZERO and is_inside_tree() and name != "" and get_parent() != null:
 			# Ensure parent is also in tree (required for full path resolution)
 			if get_parent().is_inside_tree():
-				sync_position.rpc(position)
+				# Delay RPC call slightly to ensure node is fully replicated
+				await get_tree().create_timer(0.1).timeout
+				if is_inside_tree() and is_multiplayer_authority():
+					sync_position.rpc(position)
 
 func _initialize_hero_stats():
 	"""Initialize hero stats based on hero_type"""
@@ -274,13 +277,13 @@ func _process_local_movement(delta):
 	position.y = clamp(position.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 	
 	# Handle attack input
-	if InputMap.has_action("attack") and Input.is_action_just_pressed("attack") and attack_cooldown <= 0.0:
+	if Input.is_action_just_pressed("attack") and attack_cooldown <= 0.0:
 		attack_toward_mouse()
 	
 	# Handle ability inputs
-	if InputMap.has_action("ability_q") and Input.is_action_just_pressed("ability_q") and ability_q_cooldown <= 0.0:
+	if Input.is_action_just_pressed("ability_q") and ability_q_cooldown <= 0.0:
 		use_ability_q()
-	if InputMap.has_action("ability_e") and Input.is_action_just_pressed("ability_e") and ability_e_cooldown <= 0.0:
+	if Input.is_action_just_pressed("ability_e") and ability_e_cooldown <= 0.0:
 		use_ability_e()
 	
 	# Sync position over network
@@ -333,18 +336,24 @@ func take_damage(amount: float):
 	"""Apply damage to hero - call this via RPC for network sync"""
 	# If multiplayer is active, route through RPC to authority
 	if multiplayer.multiplayer_peer != null:
-		# If we're the authority, apply directly (no RPC needed)
+		# If we're the authority, apply damage directly (most reliable)
 		if is_multiplayer_authority():
 			_apply_damage_internal(amount)
 			return
 		
-		# Get the authority peer ID (the owner of this hero)
+		# Not the authority - need to send RPC to authority
+		# Ensure node is in tree and has a valid path before calling RPC
+		if not is_inside_tree() or name == "":
+			# Node not ready, can't apply damage
+			return
+		
+		# Call RPC on this hero - it will execute on all peers, but only process on authority
 		var authority_peer = get_multiplayer_authority()
-		if authority_peer != 0 and authority_peer != multiplayer.get_unique_id():
-			# Call RPC on the authority peer specifically
+		if authority_peer != 0:
+			# Call RPC specifically on the authority peer for better reliability
 			apply_damage_rpc.rpc_id(authority_peer, amount)
 		else:
-			# Fallback: try broadcasting (less reliable)
+			# Fallback: call on all peers (will filter in apply_damage_rpc)
 			apply_damage_rpc.rpc(amount)
 		return
 	
@@ -383,7 +392,7 @@ func apply_damage_rpc(amount: float):
 	"""RPC to apply damage - only executes on authority"""
 	# Safety check: ensure multiplayer is active
 	if multiplayer.multiplayer_peer == null:
-		# Single player mode - apply directly
+		# Single player mode - apply damage directly
 		_apply_damage_internal(amount)
 		return
 	
@@ -449,17 +458,29 @@ func attack_toward_mouse():
 	# Set attack cooldown
 	attack_cooldown = 1.0 / attack_speed
 	
-	# Network sync attack
-	perform_attack.rpc(attack_dir)
+	# Network sync attack - only call RPC if we have authority and multiplayer is active
+	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+		perform_attack.rpc(attack_dir)
+	else:
+		# Single player or not authority - process locally
+		perform_attack(attack_dir)
 
 @rpc("any_peer", "call_local", "reliable")
 func perform_attack(direction: Vector2):
 	"""Perform attack in given direction"""
 	# Safety check: ensure multiplayer is active
 	if multiplayer.multiplayer_peer == null:
+		# Single player mode - process directly
+		match hero_type:
+			"Fighter":
+				_melee_attack(direction)
+			"Shooter", "Mage":
+				_ranged_attack(direction)
 		return
+	
+	# Only process on authority in multiplayer
 	if not is_multiplayer_authority():
-		return  # Only process on authority
+		return
 	
 	match hero_type:
 		"Fighter":
@@ -477,25 +498,20 @@ func _melee_attack(direction: Vector2):
 	query.shape = shape
 	query.transform.origin = position
 	
-	# Exclude self from query
-	query.exclude = [self]
-	
 	var results = space_state.intersect_shape(query)
 	
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
-			# Check if it's an enemy (different player_id)
-			if body.has("player_id") and body.player_id != player_id:
-				# Check if enemy is in attack direction (cone check)
-				var to_enemy = (body.global_position - position).normalized()
-				var dot = direction.dot(to_enemy)
-				
-				# Cone check: enemy must be in front (dot > 0.5 for ~60 degree cone)
-				if dot > 0.5:
-					var distance = position.distance_to(body.global_position)
-					if distance <= attack_range:
-						body.take_damage(attack_damage)
+			# Check if enemy is in attack direction (cone check)
+			var to_enemy = (body.global_position - position).normalized()
+			var dot = direction.dot(to_enemy)
+			
+			# Cone check: enemy must be in front (dot > 0.5 for ~60 degree cone)
+			if dot > 0.5:
+				var distance = position.distance_to(body.global_position)
+				if distance <= attack_range:
+					body.take_damage(attack_damage)
 
 func _ranged_attack(direction: Vector2):
 	"""Ranged attack - spawn projectile"""
@@ -534,6 +550,7 @@ func use_ability_q():
 	if is_dead or ability_q_cooldown > 0.0:
 		return
 	
+	# Execute ability locally first
 	match hero_type:
 		"Fighter":
 			ability_dash()
@@ -543,13 +560,20 @@ func use_ability_q():
 			ability_fireball()
 	
 	ability_q_cooldown = ability_q_max_cooldown
-	use_ability.rpc("q")
+	
+	# Network sync - only call RPC if we have authority and multiplayer is active
+	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+		use_ability.rpc("q")
+	else:
+		# Single player or not authority - already executed locally
+		pass
 
 func use_ability_e():
 	"""Use E ability"""
 	if is_dead or ability_e_cooldown > 0.0:
 		return
 	
+	# Execute ability locally first
 	match hero_type:
 		"Fighter":
 			ability_shield_bash()
@@ -559,7 +583,13 @@ func use_ability_e():
 			ability_teleport()
 	
 	ability_e_cooldown = ability_e_max_cooldown
-	use_ability.rpc("e")
+	
+	# Network sync - only call RPC if we have authority and multiplayer is active
+	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+		use_ability.rpc("e")
+	else:
+		# Single player or not authority - already executed locally
+		pass
 
 @rpc("any_peer", "call_local", "reliable")
 func use_ability(ability: String):
@@ -567,6 +597,7 @@ func use_ability(ability: String):
 	# Safety check: ensure multiplayer is active
 	if multiplayer.multiplayer_peer == null:
 		return
+	# Only process on authority - abilities that deal damage need to be processed on authority
 	if not is_multiplayer_authority():
 		return  # Visual effects only on non-authority
 
@@ -596,19 +627,14 @@ func ability_shield_bash():
 	query.shape = shape
 	query.transform.origin = position
 	
-	# Exclude self from query
-	query.exclude = [self]
-	
 	var results = space_state.intersect_shape(query)
 	
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
-			# Check if it's an enemy (different player_id)
-			if body.has("player_id") and body.player_id != player_id:
-				var distance = position.distance_to(body.global_position)
-				if distance <= bash_radius:
-					body.take_damage(bash_damage)
+			var distance = position.distance_to(body.global_position)
+			if distance <= bash_radius:
+				body.take_damage(bash_damage)
 
 # Shooter Abilities
 var rapid_fire_active: bool = false
@@ -641,20 +667,15 @@ func ability_pushback():
 	query.shape = shape
 	query.transform.origin = position
 	
-	# Exclude self from query
-	query.exclude = [self]
-	
 	var results = space_state.intersect_shape(query)
 	
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
-			# Check if it's an enemy (different player_id)
-			if body.has("player_id") and body.player_id != player_id:
-				var distance = position.distance_to(body.global_position)
-				if distance < nearest_distance:
-					nearest_distance = distance
-					nearest_enemy = body
+			var distance = position.distance_to(body.global_position)
+			if distance < nearest_distance:
+				nearest_distance = distance
+				nearest_enemy = body
 	
 	if nearest_enemy:
 		# Push enemy away
@@ -681,19 +702,14 @@ func ability_fireball():
 	query.shape = shape
 	query.transform.origin = mouse_pos
 	
-	# Exclude self from query
-	query.exclude = [self]
-	
 	var results = space_state.intersect_shape(query)
 	
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
-			# Check if it's an enemy (different player_id)
-			if body.has("player_id") and body.player_id != player_id:
-				var distance = mouse_pos.distance_to(body.global_position)
-				if distance <= fireball_radius:
-					body.take_damage(fireball_damage)
+			var distance = mouse_pos.distance_to(body.global_position)
+			if distance <= fireball_radius:
+				body.take_damage(fireball_damage)
 
 func ability_teleport():
 	"""Mage E: Instant movement to nearby location"""
