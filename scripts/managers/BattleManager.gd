@@ -30,6 +30,13 @@ func _ready():
 	if camera:
 		camera.make_current()
 	
+	# Ensure Heroes node exists (for consistent node paths in multiplayer)
+	var heroes_node = get_node_or_null("Heroes")
+	if not heroes_node:
+		heroes_node = Node2D.new()
+		heroes_node.name = "Heroes"
+		add_child(heroes_node)
+	
 	# Create hero switching manager
 	hero_switching_manager = HeroSwitchingManager.new()
 	hero_switching_manager.name = "HeroSwitchingManager"
@@ -157,12 +164,13 @@ func spawn_all_heroes_for_peer(peer_id: int):
 		# Connect death signal
 		hero.hero_died.connect(_on_hero_died.bind(peer_id, hero))
 		
-		# Add to scene tree
+		# Add to scene tree - ensure Heroes node exists
 		var heroes_node = get_node_or_null("Heroes")
-		if heroes_node:
-			heroes_node.add_child(hero, true)
-		else:
-			add_child(hero, true)
+		if not heroes_node:
+			heroes_node = Node2D.new()
+			heroes_node.name = "Heroes"
+			add_child(heroes_node)
+		heroes_node.add_child(hero, true)
 		
 		# Wait for initialization
 		await get_tree().process_frame
@@ -291,12 +299,13 @@ func spawn_heroes_on_client(peer_id: int, spawn_pos: Vector2):
 		# Connect death signal
 		hero.hero_died.connect(_on_hero_died.bind(peer_id, hero))
 		
-		# Add to scene tree
+		# Add to scene tree - ensure Heroes node exists
 		var heroes_node = get_node_or_null("Heroes")
-		if heroes_node:
-			heroes_node.add_child(hero, true)
-		else:
-			add_child(hero, true)
+		if not heroes_node:
+			heroes_node = Node2D.new()
+			heroes_node.name = "Heroes"
+			add_child(heroes_node)
+		heroes_node.add_child(hero, true)
 		
 		# Wait for initialization
 		await get_tree().process_frame

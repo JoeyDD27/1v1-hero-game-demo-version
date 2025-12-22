@@ -29,12 +29,16 @@ func register_player_heroes(player_id: int, heroes_array: Array):
 				heroes_array[i].set_process(false)
 				heroes_array[i].set_physics_process(false)
 	
-	dead_heroes[player_id] = []
+	dead_heroes[player_id] = Array[String]()
 
 func on_hero_died(player_id: int, hero_node):
 	"""Handle hero death"""
 	if not player_heroes.has(player_id):
 		return
+	
+	# Ensure dead_heroes array exists and is properly typed
+	if not dead_heroes.has(player_id):
+		dead_heroes[player_id] = Array[String]()
 	
 	# Add to dead heroes
 	var hero_type = hero_node.hero_type
@@ -61,9 +65,17 @@ func show_selection_ui(player_id: int):
 	if player_id != local_id:
 		return
 	
+	# Ensure dead_heroes array exists and is properly typed
+	if not dead_heroes.has(player_id):
+		dead_heroes[player_id] = Array[String]()
+	
 	var selection_ui = get_tree().get_first_node_in_group("hero_selection_ui")
 	if selection_ui and selection_ui.has_method("show_selection"):
-		selection_ui.show_selection(player_id, dead_heroes[player_id])
+		# Create a properly typed copy to ensure type safety
+		var dead_list: Array[String] = []
+		for hero_type in dead_heroes[player_id]:
+			dead_list.append(str(hero_type))
+		selection_ui.show_selection(player_id, dead_list)
 
 func select_next_hero(player_id: int, hero_type: String):
 	"""Select next hero to switch to"""
