@@ -121,9 +121,8 @@ func _physics_process(delta):
 	if network_update_timer >= network_update_rate:
 		# Only sync if multiplayer is ready and we're the authority
 		if multiplayer.multiplayer_peer != null and is_multiplayer_authority() and is_inside_tree():
-			# Check if node path is valid before calling RPC
-			if get_path().is_absolute_path():
-				sync_position.rpc(position)
+			# Node is in tree and has authority, safe to call RPC
+			sync_position.rpc(position)
 		network_update_timer = 0.0
 
 @rpc("any_peer", "call_local", "unreliable")
