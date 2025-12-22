@@ -330,7 +330,18 @@ func _update_visual_color():
 		visual.color = _get_hero_color()
 
 func take_damage(amount: float):
-	"""Apply damage to hero"""
+	"""Apply damage to hero - call this via RPC for network sync"""
+	# If multiplayer is active, route through RPC to authority
+	if multiplayer.multiplayer_peer != null:
+		# Call RPC on this hero - it will execute on the authority
+		apply_damage_rpc.rpc(amount)
+		return
+	
+	# Single player - apply damage directly
+	_apply_damage_internal(amount)
+
+func _apply_damage_internal(amount: float):
+	"""Internal function that actually applies damage (called on authority)"""
 	if is_invincible or is_dead:
 		return
 	
@@ -341,6 +352,12 @@ func take_damage(amount: float):
 	
 	current_health -= amount
 	current_health = max(0.0, current_health)
+	
+	# Sync health to all clients
+	if multiplayer.multiplayer_peer != null:
+		sync_health_rpc.rpc(current_health, max_health)
+	
+	# Update local health bar
 	health_changed.emit(current_health, max_health)
 	
 	# Spawn damage number
@@ -350,14 +367,47 @@ func take_damage(amount: float):
 	if current_health <= 0.0 and not is_dead:
 		die()
 
+@rpc("any_peer", "call_local", "reliable")
+func apply_damage_rpc(amount: float):
+	"""RPC to apply damage - only executes on authority"""
+	# Safety check: ensure multiplayer is active
+	if multiplayer.multiplayer_peer == null:
+		return
+	
+	# Only process on the authority (owner of this hero)
+	if not is_multiplayer_authority():
+		return
+	
+	# Apply damage
+	_apply_damage_internal(amount)
+
+@rpc("authority", "call_local", "reliable")
+func sync_health_rpc(new_health: float, max_hp: float):
+	"""Sync health value to all clients"""
+	current_health = new_health
+	max_health = max_hp
+	health_changed.emit(current_health, max_health)
+
 func die():
 	"""Handle hero death"""
 	if is_dead:
 		return
 	
 	is_dead = true
+	
+	# Sync death state to all clients
+	if multiplayer.multiplayer_peer != null:
+		sync_death_state_rpc.rpc(is_dead)
+	
 	hero_died.emit()
 	print("Hero ", hero_type, " died!")
+
+@rpc("authority", "call_local", "reliable")
+func sync_death_state_rpc(dead: bool):
+	"""Sync death state to all clients"""
+	is_dead = dead
+	if is_dead:
+		hero_died.emit()
 
 func respawn(spawn_pos: Vector2):
 	"""Respawn hero at spawn position"""
@@ -366,6 +416,12 @@ func respawn(spawn_pos: Vector2):
 	position = spawn_pos
 	spawn_protection = 3.0  # 3 seconds of invincibility
 	is_invincible = true
+	
+	# Sync respawn state to all clients
+	if multiplayer.multiplayer_peer != null:
+		sync_health_rpc.rpc(current_health, max_health)
+		sync_death_state_rpc.rpc(is_dead)
+	
 	health_changed.emit(current_health, max_health)
 	print("Hero ", hero_type, " respawned at ", spawn_pos)
 
