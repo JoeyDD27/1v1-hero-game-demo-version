@@ -47,12 +47,16 @@ func _ready():
 	
 	# Sync initial position after node is ready and multiplayer is set up
 	if is_multiplayer_authority() and multiplayer.multiplayer_peer != null:
-		# Wait a couple frames to ensure node is fully in scene tree
+		# Wait a couple frames to ensure node is fully in scene tree and replicated
 		await get_tree().process_frame
 		await get_tree().process_frame
+		await get_tree().process_frame  # Extra frame for multiplayer replication
 		# Only sync if we have a valid position and node is in tree
-		if position != Vector2.ZERO and is_inside_tree():
-			sync_position.rpc(position)
+		# Verify parent chain exists to prevent path resolution errors
+		if position != Vector2.ZERO and is_inside_tree() and name != "" and get_parent() != null:
+			# Ensure parent is also in tree (required for full path resolution)
+			if get_parent().is_inside_tree():
+				sync_position.rpc(position)
 
 func _physics_process(delta):
 	# Only process movement if this is the local player's hero
@@ -122,9 +126,12 @@ func _physics_process(delta):
 	if network_update_timer >= network_update_rate:
 		# Only sync if multiplayer is ready and we're the authority
 		# Also check that we have a valid name (ensures node is properly replicated)
+		# Verify parent chain exists to prevent path resolution errors
 		if multiplayer.multiplayer_peer != null and is_multiplayer_authority() and is_inside_tree() and name != "":
-			# Node is in tree and has authority, safe to call RPC
-			sync_position.rpc(position)
+			# Ensure parent is also in tree (required for full path resolution like "BattleScene/Heroes/Hero_1")
+			if get_parent() != null and get_parent().is_inside_tree():
+				# Node is in tree and has authority, safe to call RPC
+				sync_position.rpc(position)
 		network_update_timer = 0.0
 
 @rpc("any_peer", "call_local", "unreliable")
@@ -145,7 +152,6 @@ func set_player_id(id: int):
 	player_id = id
 	var color = Color.BLUE if player_id == 1 else Color.RED
 	
-	if has_node("Visual"):
-		var visual = get_node("Visual")
-		if visual is Polygon2D:
-			visual.color = color
+	var visual = get_node_or_null("Visual")
+	if visual is Polygon2D:
+		visual.color = color

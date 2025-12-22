@@ -117,8 +117,8 @@ func spawn_hero_for_peer(peer_id: int):
 	print("Spawned hero for peer ", peer_id, " at ", spawn_point.position)
 	print("Hero position: ", hero.position)
 	print("Hero has visual: ", hero.has_node("Visual"))
-	if hero.has_node("Visual"):
-		var visual = hero.get_node("Visual")
+	var visual = hero.get_node_or_null("Visual")
+	if visual:
 		print("Visual color: ", visual.color if visual.has_method("get") else "N/A")
 
 func spawn_all_heroes():
