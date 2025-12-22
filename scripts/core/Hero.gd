@@ -3,6 +3,10 @@ extends CharacterBody2D
 @export var speed: float = 300.0
 @export var player_id: int = 1
 
+const HERO_RADIUS = 30.0
+const SCREEN_WIDTH = 1920.0
+const SCREEN_HEIGHT = 1080.0
+
 var target_position: Vector2 = Vector2.ZERO
 var has_target: bool = false
 var is_moving: bool = false
@@ -31,11 +35,10 @@ func _ready():
 		
 		# Create circle polygon with larger radius for better visibility
 		var points = PackedVector2Array()
-		var radius = 30.0  # Larger radius for visibility
 		var point_count = 32
 		for i in range(point_count):
 			var angle = (i * 2.0 * PI) / point_count
-			points.append(Vector2(cos(angle) * radius, sin(angle) * radius))
+			points.append(Vector2(cos(angle) * HERO_RADIUS, sin(angle) * HERO_RADIUS))
 		visual.polygon = points
 		add_child(visual)
 	
@@ -47,8 +50,8 @@ func _ready():
 		# Wait a couple frames to ensure node is fully in scene tree
 		await get_tree().process_frame
 		await get_tree().process_frame
-		# Only sync if we have a valid position
-		if position != Vector2.ZERO:
+		# Only sync if we have a valid position and node is in tree
+		if position != Vector2.ZERO and is_inside_tree():
 			sync_position.rpc(position)
 
 func _physics_process(delta):
@@ -59,9 +62,8 @@ func _physics_process(delta):
 		if network_position.distance_to(Vector2.ZERO) > 1.0 or position.distance_to(Vector2.ZERO) < 1.0:
 			position = position.lerp(network_position, 0.5)
 			# Clamp network-synced position to bounds too
-			var hero_radius = 30.0
-			position.x = clamp(position.x, hero_radius, 1920 - hero_radius)
-			position.y = clamp(position.y, hero_radius, 1080 - hero_radius)
+			position.x = clamp(position.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS)
+			position.y = clamp(position.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 		return
 	
 	# Handle movement
@@ -71,10 +73,9 @@ func _physics_process(delta):
 	if Input.is_action_just_pressed("right_click"):
 		var mouse_pos = get_global_mouse_position()
 		# Clamp target to screen bounds
-		var hero_radius = 30.0
 		target_position = Vector2(
-			clamp(mouse_pos.x, hero_radius, 1920 - hero_radius),
-			clamp(mouse_pos.y, hero_radius, 1080 - hero_radius)
+			clamp(mouse_pos.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS),
+			clamp(mouse_pos.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 		)
 		has_target = true
 	
@@ -112,21 +113,23 @@ func _physics_process(delta):
 	move_and_slide()
 	
 	# Clamp position to screen bounds (with hero radius padding)
-	var hero_radius = 30.0
-	position.x = clamp(position.x, hero_radius, 1920 - hero_radius)
-	position.y = clamp(position.y, hero_radius, 1080 - hero_radius)
+	position.x = clamp(position.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS)
+	position.y = clamp(position.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 	
 	# Sync position over network
 	network_update_timer += delta
 	if network_update_timer >= network_update_rate:
 		# Only sync if multiplayer is ready and we're the authority
-		if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
-			sync_position.rpc(position)
+		if multiplayer.multiplayer_peer != null and is_multiplayer_authority() and is_inside_tree():
+			# Check if node path is valid before calling RPC
+			if get_path().is_absolute_path():
+				sync_position.rpc(position)
 		network_update_timer = 0.0
 
 @rpc("any_peer", "call_local", "unreliable")
 func sync_position(pos: Vector2):
 	"""Syncs position across network"""
+	# Only process if we're not the authority (we receive other players' positions)
 	if not is_multiplayer_authority():
 		network_position = pos
 		# Immediately snap to position if it's way off (initial sync or teleport)

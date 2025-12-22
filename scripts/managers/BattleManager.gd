@@ -88,20 +88,22 @@ func spawn_hero_for_peer(peer_id: int):
 	hero.position = spawn_point.position
 	hero.name = "Hero_" + str(peer_id)
 	
-	# Set player ID and authority BEFORE adding to scene tree
+	# Set player ID BEFORE adding to scene tree
 	hero.set_player_id(peer_id)
-	hero.set_multiplayer_authority(peer_id)
 	
-	# Add to scene tree with proper replication
+	# Add to scene tree FIRST
 	var heroes_node = get_node_or_null("Heroes")
 	if heroes_node:
 		heroes_node.add_child(hero, true)
 	else:
 		add_child(hero, true)
 	
-	# Wait for hero to be fully initialized
+	# Wait for hero to be fully initialized in scene tree
 	await get_tree().process_frame
 	await get_tree().process_frame
+	
+	# Set multiplayer authority AFTER node is in tree
+	hero.set_multiplayer_authority(peer_id)
 	
 	heroes[peer_id] = hero
 	
