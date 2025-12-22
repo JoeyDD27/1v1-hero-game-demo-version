@@ -2,10 +2,30 @@ extends CharacterBody2D
 
 @export var speed: float = 300.0
 @export var player_id: int = 1
+@export var hero_type: String = "Fighter"  # "Fighter", "Shooter", or "Mage"
 
 const HERO_RADIUS = 30.0
 const SCREEN_WIDTH = 1920.0
 const SCREEN_HEIGHT = 1080.0
+
+# Hero Stats
+var max_health: float = 1000.0
+var current_health: float = 1000.0
+var attack_damage: float = 80.0
+var attack_range: float = 120.0
+var attack_speed: float = 1.0  # Attacks per second
+var attack_cooldown: float = 0.0
+
+# Ability cooldowns
+var ability_q_cooldown: float = 0.0
+var ability_e_cooldown: float = 0.0
+var ability_q_max_cooldown: float = 8.0
+var ability_e_max_cooldown: float = 12.0
+
+# Combat state
+var is_dead: bool = false
+var spawn_protection: float = 0.0  # Spawn protection timer
+var is_invincible: bool = false
 
 var target_position: Vector2 = Vector2.ZERO
 var has_target: bool = false
@@ -16,7 +36,13 @@ var network_position: Vector2 = Vector2.ZERO
 var network_update_rate: float = 0.05  # Update every 50ms
 var network_update_timer: float = 0.0
 
+signal hero_died
+signal health_changed(new_health: float, max_health: float)
+
 func _ready():
+	# Initialize hero stats based on type
+	_initialize_hero_stats()
+	
 	# Set up collision shape if not already set
 	if not has_node("CollisionShape2D"):
 		var collision = CollisionShape2D.new()
@@ -30,7 +56,7 @@ func _ready():
 		# Use Polygon2D to draw a large, visible circle
 		var visual = Polygon2D.new()
 		visual.name = "Visual"
-		var color = Color.BLUE if player_id == 1 else Color.RED
+		var color = _get_hero_color()
 		visual.color = color
 		
 		# Create circle polygon with larger radius for better visibility
@@ -42,8 +68,50 @@ func _ready():
 		visual.polygon = points
 		add_child(visual)
 	
+	# Initialize health
+	current_health = max_health
+	
+	# Create health bar
+	_create_health_bar()
+	
+	# Connect health changed signal
+	health_changed.connect(_on_health_changed)
+	
 	# Initialize network position to current position
 	network_position = position
+
+func _create_health_bar():
+	"""Create health bar for this hero"""
+	# Wait a frame to ensure hero is in scene tree
+	await get_tree().process_frame
+	
+	var health_bar_scene = preload("res://scenes/HealthBar.tscn")
+	var health_bar = null
+	
+	if health_bar_scene:
+		health_bar = health_bar_scene.instantiate()
+	else:
+		# Create dynamically if scene doesn't exist
+		health_bar = preload("res://scripts/ui/HealthBar.gd").new()
+	
+	if health_bar:
+		health_bar.setup(self, max_health)
+		
+		# Add to scene tree (add to battle scene or root)
+		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
+		if battle_scene:
+			battle_scene.add_child(health_bar)
+		else:
+			get_tree().root.add_child(health_bar)
+
+func _on_health_changed(new_health: float, max_hp: float):
+	"""Update health bar when health changes"""
+	# Find health bar and update it
+	var health_bars = get_tree().get_nodes_in_group("health_bars")
+	for hb in health_bars:
+		if hb.has_method("update_health") and hb.hero == self:
+			hb.update_health(new_health, max_hp)
+			break
 	
 	# Sync initial position after node is ready and multiplayer is set up
 	if is_multiplayer_authority() and multiplayer.multiplayer_peer != null:
@@ -58,6 +126,52 @@ func _ready():
 			if get_parent().is_inside_tree():
 				sync_position.rpc(position)
 
+func _initialize_hero_stats():
+	"""Initialize hero stats based on hero_type"""
+	match hero_type:
+		"Fighter":
+			max_health = 1000.0
+			attack_damage = 80.0
+			attack_range = 120.0
+			attack_speed = 1.0
+			ability_q_max_cooldown = 8.0
+			ability_e_max_cooldown = 12.0
+		"Shooter":
+			max_health = 600.0
+			attack_damage = 70.0
+			attack_range = 600.0
+			attack_speed = 1.2
+			ability_q_max_cooldown = 15.0
+			ability_e_max_cooldown = 10.0
+		"Mage":
+			max_health = 400.0
+			attack_damage = 90.0
+			attack_range = 500.0
+			attack_speed = 1.0
+			ability_q_max_cooldown = 6.0
+			ability_e_max_cooldown = 10.0
+	current_health = max_health
+
+func _get_hero_color() -> Color:
+	"""Get color based on hero type and player ID"""
+	if player_id == 1:
+		match hero_type:
+			"Fighter":
+				return Color.BLUE
+			"Shooter":
+				return Color.GREEN
+			"Mage":
+				return Color.CYAN
+	else:
+		match hero_type:
+			"Fighter":
+				return Color.RED
+			"Shooter":
+				return Color.ORANGE
+			"Mage":
+				return Color.MAGENTA
+	return Color.WHITE
+
 func _physics_process(delta):
 	# Only process movement if this is the local player's hero
 	if not is_multiplayer_authority():
@@ -71,43 +185,70 @@ func _physics_process(delta):
 			position.y = clamp(position.y, hero_radius, SCREEN_HEIGHT - hero_radius)
 		return
 	
-	# Handle movement
+	# Update cooldowns
+	attack_cooldown = max(0.0, attack_cooldown - delta)
+	ability_q_cooldown = max(0.0, ability_q_cooldown - delta)
+	ability_e_cooldown = max(0.0, ability_e_cooldown - delta)
+	
+	# Update rapid fire buff
+	if rapid_fire_active:
+		rapid_fire_timer -= delta
+		if rapid_fire_timer <= 0.0:
+			rapid_fire_active = false
+			attack_speed /= 2.0  # Restore normal attack speed
+			# Restore visual color
+			var visual = get_node_or_null("Visual")
+			if visual is Polygon2D:
+				visual.color = _get_hero_color()
+	
+	# Update spawn protection
+	if spawn_protection > 0.0:
+		spawn_protection -= delta
+		is_invincible = spawn_protection > 0.0
+	else:
+		is_invincible = false
+	
+	# Don't process if dead
+	if is_dead:
+		return
+	
+	# Handle movement - WASD takes priority
 	var movement = Vector2.ZERO
 	
-	# Right-click movement (MOBA style) - takes priority
-	if Input.is_action_just_pressed("right_click"):
-		var mouse_pos = get_global_mouse_position()
-		# Clamp target to screen bounds
-		target_position = Vector2(
-			clamp(mouse_pos.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS),
-			clamp(mouse_pos.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
-		)
-		has_target = true
+	# WASD movement (priority)
+	if Input.is_action_pressed("move_up"):
+		movement.y -= 1
+	if Input.is_action_pressed("move_down"):
+		movement.y += 1
+	if Input.is_action_pressed("move_left"):
+		movement.x -= 1
+	if Input.is_action_pressed("move_right"):
+		movement.x += 1
 	
-	# Move toward target if set (right-click movement)
-	if has_target:
-		var direction = (target_position - position).normalized()
-		var distance = position.distance_to(target_position)
-		
-		if distance > 5.0:  # Stop when close enough
-			movement = direction
-		else:
-			has_target = false
-			movement = Vector2.ZERO
+	# Cancel right-click target if WASD is pressed
+	if movement.length() > 0:
+		has_target = false
 	else:
-		# WASD movement (only if no right-click target)
-		if Input.is_action_pressed("move_up"):
-			movement.y -= 1
-		if Input.is_action_pressed("move_down"):
-			movement.y += 1
-		if Input.is_action_pressed("move_left"):
-			movement.x -= 1
-		if Input.is_action_pressed("move_right"):
-			movement.x += 1
+		# Right-click movement (only if WASD not pressed)
+		if Input.is_action_just_pressed("right_click"):
+			var mouse_pos = get_global_mouse_position()
+			# Clamp target to screen bounds
+			target_position = Vector2(
+				clamp(mouse_pos.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS),
+				clamp(mouse_pos.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
+			)
+			has_target = true
 		
-		# Cancel right-click target if WASD is pressed
-		if movement.length() > 0:
-			has_target = false
+		# Move toward target if set (right-click movement)
+		if has_target:
+			var direction = (target_position - position).normalized()
+			var distance = position.distance_to(target_position)
+			
+			if distance > 5.0:  # Stop when close enough
+				movement = direction
+			else:
+				has_target = false
+				movement = Vector2.ZERO
 	
 	# Normalize movement if diagonal
 	if movement.length() > 1.0:
@@ -120,6 +261,16 @@ func _physics_process(delta):
 	# Clamp position to screen bounds (with hero radius padding)
 	position.x = clamp(position.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS)
 	position.y = clamp(position.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
+	
+	# Handle attack input
+	if Input.is_action_just_pressed("attack") and attack_cooldown <= 0.0:
+		attack_toward_mouse()
+	
+	# Handle ability inputs
+	if Input.is_action_just_pressed("ability_q") and ability_q_cooldown <= 0.0:
+		use_ability_q()
+	if Input.is_action_just_pressed("ability_e") and ability_e_cooldown <= 0.0:
+		use_ability_e()
 	
 	# Sync position over network
 	network_update_timer += delta
@@ -150,8 +301,325 @@ func sync_position(pos: Vector2):
 func set_player_id(id: int):
 	"""Sets the player ID and updates visual"""
 	player_id = id
-	var color = Color.BLUE if player_id == 1 else Color.RED
-	
+	_update_visual_color()
+
+func set_hero_type(type: String):
+	"""Sets the hero type and updates stats"""
+	hero_type = type
+	_initialize_hero_stats()
+	_update_visual_color()
+
+func _update_visual_color():
+	"""Updates visual color based on hero type and player ID"""
 	var visual = get_node_or_null("Visual")
 	if visual is Polygon2D:
-		visual.color = color
+		visual.color = _get_hero_color()
+
+func take_damage(amount: float):
+	"""Apply damage to hero"""
+	if is_invincible or is_dead:
+		return
+	
+	# Apply damage multiplier (for sudden death)
+	var battle_manager = get_tree().get_first_node_in_group("battle_manager")
+	if battle_manager and battle_manager.has("damage_multiplier"):
+		amount *= battle_manager.damage_multiplier
+	
+	current_health -= amount
+	current_health = max(0.0, current_health)
+	health_changed.emit(current_health, max_health)
+	
+	# Spawn damage number
+	spawn_damage_number.rpc(amount)
+	
+	# Check for death
+	if current_health <= 0.0 and not is_dead:
+		die()
+
+func die():
+	"""Handle hero death"""
+	if is_dead:
+		return
+	
+	is_dead = true
+	hero_died.emit()
+	print("Hero ", hero_type, " died!")
+
+func respawn(spawn_pos: Vector2):
+	"""Respawn hero at spawn position"""
+	is_dead = false
+	current_health = max_health
+	position = spawn_pos
+	spawn_protection = 3.0  # 3 seconds of invincibility
+	is_invincible = true
+	health_changed.emit(current_health, max_health)
+	print("Hero ", hero_type, " respawned at ", spawn_pos)
+
+func attack_toward_mouse():
+	"""Attack toward mouse cursor position"""
+	if is_dead or attack_cooldown > 0.0:
+		return
+	
+	var mouse_pos = get_global_mouse_position()
+	var attack_dir = (mouse_pos - position).normalized()
+	
+	# Set attack cooldown
+	attack_cooldown = 1.0 / attack_speed
+	
+	# Network sync attack
+	perform_attack.rpc(attack_dir)
+
+@rpc("any_peer", "call_local", "reliable")
+func perform_attack(direction: Vector2):
+	"""Perform attack in given direction"""
+	if not is_multiplayer_authority():
+		return  # Only process on authority
+	
+	match hero_type:
+		"Fighter":
+			_melee_attack(direction)
+		"Shooter", "Mage":
+			_ranged_attack(direction)
+
+func _melee_attack(direction: Vector2):
+	"""Melee attack - cone/line attack in direction"""
+	# Find enemies in attack range and direction
+	var space_state = get_world_2d().direct_space_state
+	var query = PhysicsShapeQueryParameters2D.new()
+	var shape = CircleShape2D.new()
+	shape.radius = attack_range
+	query.shape = shape
+	query.transform.origin = position
+	
+	var results = space_state.intersect_shape(query)
+	
+	for result in results:
+		var body = result.collider
+		if body.has_method("take_damage") and body != self:
+			# Check if enemy is in attack direction (cone check)
+			var to_enemy = (body.global_position - position).normalized()
+			var dot = direction.dot(to_enemy)
+			
+			# Cone check: enemy must be in front (dot > 0.5 for ~60 degree cone)
+			if dot > 0.5:
+				var distance = position.distance_to(body.global_position)
+				if distance <= attack_range:
+					body.take_damage(attack_damage)
+
+func _ranged_attack(direction: Vector2):
+	"""Ranged attack - spawn projectile"""
+	var projectile_scene = preload("res://scenes/Projectile.tscn")
+	var projectile = null
+	
+	if projectile_scene:
+		projectile = projectile_scene.instantiate()
+	else:
+		# Create projectile dynamically if scene doesn't exist
+		projectile = preload("res://scripts/core/Projectile.gd").new()
+	
+	if projectile:
+		projectile.setup(direction, attack_damage, player_id, _get_projectile_color())
+		projectile.position = position
+		
+		# Add to scene tree
+		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
+		if battle_scene:
+			battle_scene.add_child(projectile)
+		else:
+			get_tree().root.add_child(projectile)
+
+func _get_projectile_color() -> Color:
+	"""Get projectile color based on hero type"""
+	match hero_type:
+		"Shooter":
+			return Color.GREEN
+		"Mage":
+			return Color.RED
+		_:
+			return Color.YELLOW
+
+func use_ability_q():
+	"""Use Q ability"""
+	if is_dead or ability_q_cooldown > 0.0:
+		return
+	
+	match hero_type:
+		"Fighter":
+			ability_dash()
+		"Shooter":
+			ability_rapid_fire()
+		"Mage":
+			ability_fireball()
+	
+	ability_q_cooldown = ability_q_max_cooldown
+	use_ability.rpc("q")
+
+func use_ability_e():
+	"""Use E ability"""
+	if is_dead or ability_e_cooldown > 0.0:
+		return
+	
+	match hero_type:
+		"Fighter":
+			ability_shield_bash()
+		"Shooter":
+			ability_pushback()
+		"Mage":
+			ability_teleport()
+	
+	ability_e_cooldown = ability_e_max_cooldown
+	use_ability.rpc("e")
+
+@rpc("any_peer", "call_local", "reliable")
+func use_ability(ability: String):
+	"""Network sync for ability usage"""
+	if not is_multiplayer_authority():
+		return  # Visual effects only on non-authority
+
+# Fighter Abilities
+func ability_dash():
+	"""Fighter Q: Dash to mouse position"""
+	var mouse_pos = get_global_mouse_position()
+	var dash_distance = 300.0
+	var dash_dir = (mouse_pos - position).normalized()
+	var dash_target = position + dash_dir * dash_distance
+	
+	# Clamp to screen bounds
+	dash_target.x = clamp(dash_target.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS)
+	dash_target.y = clamp(dash_target.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
+	
+	position = dash_target
+
+func ability_shield_bash():
+	"""Fighter E: Area damage around hero"""
+	var bash_radius = 150.0
+	var bash_damage = attack_damage * 1.5
+	
+	var space_state = get_world_2d().direct_space_state
+	var query = PhysicsShapeQueryParameters2D.new()
+	var shape = CircleShape2D.new()
+	shape.radius = bash_radius
+	query.shape = shape
+	query.transform.origin = position
+	
+	var results = space_state.intersect_shape(query)
+	
+	for result in results:
+		var body = result.collider
+		if body.has_method("take_damage") and body != self:
+			var distance = position.distance_to(body.global_position)
+			if distance <= bash_radius:
+				body.take_damage(bash_damage)
+
+# Shooter Abilities
+var rapid_fire_active: bool = false
+var rapid_fire_timer: float = 0.0
+
+func ability_rapid_fire():
+	"""Shooter Q: Temporary attack speed buff"""
+	rapid_fire_active = true
+	rapid_fire_timer = 5.0
+	attack_speed *= 2.0  # Double attack speed
+	
+	# Visual indicator (green outline)
+	var visual = get_node_or_null("Visual")
+	if visual is Polygon2D:
+		visual.color = Color.GREEN
+
+func ability_pushback():
+	"""Shooter E: Push nearest enemy away"""
+	var push_radius = 400.0
+	var push_force = 200.0
+	
+	# Find nearest enemy
+	var nearest_enemy = null
+	var nearest_distance = INF
+	
+	var space_state = get_world_2d().direct_space_state
+	var query = PhysicsShapeQueryParameters2D.new()
+	var shape = CircleShape2D.new()
+	shape.radius = push_radius
+	query.shape = shape
+	query.transform.origin = position
+	
+	var results = space_state.intersect_shape(query)
+	
+	for result in results:
+		var body = result.collider
+		if body.has_method("take_damage") and body != self:
+			var distance = position.distance_to(body.global_position)
+			if distance < nearest_distance:
+				nearest_distance = distance
+				nearest_enemy = body
+	
+	if nearest_enemy:
+		# Push enemy away
+		var push_dir = (nearest_enemy.global_position - position).normalized()
+		var push_target = nearest_enemy.global_position + push_dir * push_force
+		
+		# Clamp to screen bounds
+		push_target.x = clamp(push_target.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS)
+		push_target.y = clamp(push_target.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
+		
+		nearest_enemy.position = push_target
+
+# Mage Abilities
+func ability_fireball():
+	"""Mage Q: Area damage at target location"""
+	var mouse_pos = get_global_mouse_position()
+	var fireball_radius = 100.0
+	var fireball_damage = attack_damage * 2.0
+	
+	var space_state = get_world_2d().direct_space_state
+	var query = PhysicsShapeQueryParameters2D.new()
+	var shape = CircleShape2D.new()
+	shape.radius = fireball_radius
+	query.shape = shape
+	query.transform.origin = mouse_pos
+	
+	var results = space_state.intersect_shape(query)
+	
+	for result in results:
+		var body = result.collider
+		if body.has_method("take_damage") and body != self:
+			var distance = mouse_pos.distance_to(body.global_position)
+			if distance <= fireball_radius:
+				body.take_damage(fireball_damage)
+
+func ability_teleport():
+	"""Mage E: Instant movement to nearby location"""
+	var mouse_pos = get_global_mouse_position()
+	var teleport_distance = 300.0
+	var teleport_dir = (mouse_pos - position).normalized()
+	var teleport_target = position + teleport_dir * teleport_distance
+	
+	# Clamp to screen bounds
+	teleport_target.x = clamp(teleport_target.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS)
+	teleport_target.y = clamp(teleport_target.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
+	
+	position = teleport_target
+
+@rpc("any_peer", "call_local", "reliable")
+func spawn_damage_number(amount: float):
+	"""Spawn damage number (called when damage is taken)"""
+	if not is_inside_tree():
+		return
+	
+	var damage_number_scene = preload("res://scenes/DamageNumber.tscn")
+	var damage_num = null
+	
+	if damage_number_scene:
+		damage_num = damage_number_scene.instantiate()
+	else:
+		# Create dynamically if scene doesn't exist
+		damage_num = preload("res://scripts/ui/DamageNumber.gd").new()
+	
+	if damage_num:
+		damage_num.setup(amount, global_position + Vector2(0, -40))
+		
+		# Add to scene tree
+		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
+		if battle_scene:
+			battle_scene.add_child(damage_num)
+		else:
+			get_tree().root.add_child(damage_num)

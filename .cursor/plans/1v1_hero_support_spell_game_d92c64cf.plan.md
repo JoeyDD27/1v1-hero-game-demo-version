@@ -47,9 +47,7 @@ todos:
 
 ## Demo Summary
 
-**Goal**: Create a playable demo to test core game mechanics with friends at home.
-
-**Content**:
+**Goal**: Create a playable demo to test core game mechanics with friends at home.**Content**:
 
 - **3 Heroes** total (Fighter, Shooter, Mage) - players get all 3
 - **3 Supports** total (Tank, Damage Dealer, Buffer) - players get all 3  
@@ -196,18 +194,18 @@ A playable demo to validate core game mechanics. Simplified from full game to fo
 
 1. **Host (Computer 1)**: 
 
-   - Creates multiplayer peer → Starts server → **DISPLAYS WiFi IP ADDRESS IN BIG TEXT** (e.g., "192.168.1.100")
-   - Shows "Waiting for player..." status
-   - Waits for client to connect
+- Creates multiplayer peer → Starts server → **DISPLAYS WiFi IP ADDRESS IN BIG TEXT** (e.g., "192.168.1.100")
+- Shows "Waiting for player..." status
+- Waits for client to connect
 
 2. **Client (Computer 2)**: 
 
-   - Creates multiplayer peer → Enters host's WiFi IP address (from host's screen) → Connects to host → Joins game
-   - Shows "Connecting..." then "Connected!" when successful
+- Creates multiplayer peer → Enters host's WiFi IP address (from host's screen) → Connects to host → Joins game
+- Shows "Connecting..." then "Connected!" when successful
 
 3. **Both**: 
 
-   - Synchronize game state → Both see "Ready to start" → Click "Start Battle" → Play on separate computers!
+- Synchronize game state → Both see "Ready to start" → Click "Start Battle" → Play on separate computers!
 
 **IMPORTANT**: WiFi IP address MUST be displayed prominently on host's screen so they can easily tell their friend what IP to connect to.
 
@@ -264,16 +262,16 @@ func display_ip_address(ip: String):
 **Main Menu**:
 
 - **"Host Game" button** (creates server, displays WiFi IP address in BIG, PROMINENT text)
-  - **IP Address Display**: Large, bold text showing WiFi IP (e.g., "192.168.1.100")
-  - **Copy to Clipboard** button (optional but helpful)
-  - **Connection Status**: "Waiting for player..." displayed clearly
+- **IP Address Display**: Large, bold text showing WiFi IP (e.g., "192.168.1.100")
+- **Copy to Clipboard** button (optional but helpful)
+- **Connection Status**: "Waiting for player..." displayed clearly
 - **"Join Game" button** (opens WiFi IP address input field, connects to host)
-  - **IP Input Field**: Text field to enter host's WiFi IP address
-  - **Connect Button**: Click to connect
-  - **Connection Status**: "Connecting..." / "Connected!" / "Failed to connect"
+- **IP Input Field**: Text field to enter host's WiFi IP address
+- **Connect Button**: Click to connect
+- **Connection Status**: "Connecting..." / "Connected!" / "Failed to connect"
 - **WiFi IP address display** (MUST be visible and easy to read for host to share)
-  - Display format: "Your IP: 192.168.1.100" (large font, center screen)
-  - Show port if needed: "Port: 7777"
+- Display format: "Your IP: 192.168.1.100" (large font, center screen)
+- Show port if needed: "Port: 7777"
 - **Connection status indicator** ("Waiting for player..." / "Connected!" / "Ready to start")
 - **"Quick Start" button** (single-player test mode for development)
 
@@ -281,7 +279,7 @@ func display_ip_address(ip: String):
 
 **Note**: Open this project folder in Cursor AI to edit code files (.gd scripts)
 
-```
+```javascript
 game_demo/
 ├── scenes/
 │   ├── MainMenu.tscn (simple start screen)
@@ -324,17 +322,17 @@ game_demo/
 - [ ] Install Godot 4.x and create new 2D project
 - [ ] Open project folder in Cursor AI
 - [ ] **Create NetworkManager.gd** with WiFi IP detection and display
-  - [ ] Function to get local WiFi IP (192.168.x.x or 10.x.x.x)
-  - [ ] Function to display IP address in large, visible text
-  - [ ] Host game functionality (start server, show IP)
-  - [ ] Join game functionality (connect to IP address)
-  - [ ] Connection status handling
+- [ ] Function to get local WiFi IP (192.168.x.x or 10.x.x.x)
+- [ ] Function to display IP address in large, visible text
+- [ ] Host game functionality (start server, show IP)
+- [ ] Join game functionality (connect to IP address)
+- [ ] Connection status handling
 - [ ] **Create MainMenu scene** with UI
-  - [ ] "Host Game" button (shows WiFi IP in BIG TEXT when clicked)
-  - [ ] "Join Game" button (opens IP input field)
-  - [ ] IP address display label (large font, center screen)
-  - [ ] Connection status label
-  - [ ] "Quick Start" button (single-player test)
+- [ ] "Host Game" button (shows WiFi IP in BIG TEXT when clicked)
+- [ ] "Join Game" button (opens IP input field)
+- [ ] IP address display label (large font, center screen)
+- [ ] Connection status label
+- [ ] "Quick Start" button (single-player test)
 
 ### Phase 2: Core Gameplay
 
@@ -350,27 +348,27 @@ game_demo/
 ### Phase 3: Abilities & Supports
 
 - [ ] Implement ability system (Q/E hotkeys, cooldowns)
-  - [ ] Fighter: Dash, Shield Bash
-  - [ ] Shooter: Rapid Fire, Piercing Shot
-  - [ ] Mage: Fireball, Teleport
+- [ ] Fighter: Dash, Shield Bash
+- [ ] Shooter: Rapid Fire, Piercing Shot
+- [ ] Mage: Fireball, Teleport
 - [ ] Create Support.gd base class
 - [ ] Implement 3 supports (Tank, Damage Dealer, Buffer)
-  - [ ] Visual: Colored rectangles (gray/red/yellow)
-  - [ ] AI: Follow player, attack enemies
-  - [ ] Summoning: Hotkeys 1/2/3, one-time use
+- [ ] Visual: Colored rectangles (gray/red/yellow)
+- [ ] AI: Follow player, attack enemies
+- [ ] Summoning: Hotkeys 1/2/3, one-time use
 - [ ] Add support AI behavior
 
 ### Phase 4: Big Spells & Hero Switching
 
 - [ ] Create BigSpell.gd system
 - [ ] Implement 2 spells (Area Blast, Massive Buff)
-  - [ ] Visual: Large colored circles (red/green)
-  - [ ] R hotkey activation
-  - [ ] Cast at mouse location (instant cast)
-  - [ ] Area Blast: Cast at mouse location, instant damage
-  - [ ] Massive Buff: Cast at mouse location, affects player and supports in area
-  - [ ] One-time use restriction
-  - [ ] Cooldown UI display
+- [ ] Visual: Large colored circles (red/green)
+- [ ] R hotkey activation
+- [ ] Cast at mouse location (instant cast)
+- [ ] Area Blast: Cast at mouse location, instant damage
+- [ ] Massive Buff: Cast at mouse location, affects player and supports in area
+- [ ] One-time use restriction
+- [ ] Cooldown UI display
 - [ ] Implement hero death detection
 - [ ] Create hero switching system (no switching before death, only on death)
 - [ ] Create hero switching overlay UI (press 1/2/3 to select, appears on death)
@@ -384,10 +382,10 @@ game_demo/
 ### Phase 5: Pre-Battle & Polish
 
 - [ ] Create selection screen UI
-  - [ ] Auto-select all 3 heroes (just confirm)
-  - [ ] Auto-select all 3 supports (just confirm)
-  - [ ] Choose 1 of 2 big spells (click button)
-  - [ ] Quick Start option (skip selection)
+- [ ] Auto-select all 3 heroes (just confirm)
+- [ ] Auto-select all 3 supports (just confirm)
+- [ ] Choose 1 of 2 big spells (click button)
+- [ ] Quick Start option (skip selection)
 - [ ] Add obstacles to arena (2-3 rectangular blocks with collision)
 - [ ] Add obstacle collision system (heroes, projectiles, abilities all blocked by obstacles) - ask Cursor: "Add collision detection so nothing can pass through obstacles"
 - [ ] Visual polish (ensure all blocks/circles, NO animations)
@@ -399,9 +397,9 @@ game_demo/
 - [ ] Test single-player (Quick Start mode)
 - [ ] Test multiplayer locally (2 instances, localhost)
 - [ ] **Test WiFi connection** (2 computers, same WiFi)
-  - [ ] Verify IP address displays correctly
-  - [ ] Verify connection works
-  - [ ] Test full gameplay loop
+- [ ] Verify IP address displays correctly
+- [ ] Verify connection works
+- [ ] Test full gameplay loop
 - [ ] Export for Windows (.exe)
 - [ ] Export for Mac (.app)
 - [ ] Test exported versions
@@ -427,17 +425,17 @@ game_demo/
 - [ ] Open project folder in Cursor AI
 - [ ] Set up basic scene structure (ask Cursor to create initial scene files)
 - [ ] **Set up networking early** - ask Cursor: "Create NetworkManager.gd with host/join functionality and WiFi IP display"
-  - **CRITICAL**: WiFi IP address must be displayed in large, visible text when hosting
-  - Use `IP.get_local_addresses()` or `IP.resolve_hostname(OS.get_environment("COMPUTERNAME"), IP.TYPE_IPV4)` to get WiFi IP
-  - Filter for local network IPs (192.168.x.x or 10.x.x.x)
-  - Display IP address prominently in UI (large font, center of screen, bold)
-  - Example display: "Your WiFi IP: 192.168.1.100" (font size 48+, center screen)
+- **CRITICAL**: WiFi IP address must be displayed in large, visible text when hosting
+- Use `IP.get_local_addresses()` or `IP.resolve_hostname(OS.get_environment("COMPUTERNAME"), IP.TYPE_IPV4)` to get WiFi IP
+- Filter for local network IPs (192.168.x.x or 10.x.x.x)
+- Display IP address prominently in UI (large font, center of screen, bold)
+- Example display: "Your WiFi IP: 192.168.1.100" (font size 48+, center screen)
 - [ ] Create simple arena (colored rectangle background - gray or beige)
 - [ ] Implement hero movement (WASD for both players) - ask Cursor: "Create PlayerController.gd for WASD movement with network sync"
 - [ ] Add hero visuals: Colored circles (use Godot's CircleShape2D or simple sprite)
-  - Fighter: Blue circle (larger)
-  - Shooter: Green circle (medium)
-  - Mage: Red circle (smaller)
+- Fighter: Blue circle (larger)
+- Shooter: Green circle (medium)
+- Mage: Red circle (smaller)
 - [ ] Add player indicators (P1 = blue outline, P2 = red outline)
 - [ ] Test: Both players can move independently (test with 2 computers on WiFi)
 
@@ -459,9 +457,9 @@ game_demo/
 - [ ] Add collision system: Projectiles blocked by obstacles - ask Cursor: "Add obstacle collision to Projectile.gd"
 - [ ] Add damage system: Text numbers appear above damaged units (no animations, just instant text) - ask Cursor: "Create damage number popup system"
 - [ ] Create 2 abilities per hero (Q and E keys) - ask Cursor: "Add ability system to Hero.gd with Q/E hotkeys":
-  - Fighter: Dash (instant movement), Shield Bash (damage circle)
-  - Shooter: Rapid Fire (buff), Piercing Shot (line projectile)
-  - Mage: Fireball (area circle), Teleport (instant movement)
+- Fighter: Dash (instant movement), Shield Bash (damage circle)
+- Shooter: Rapid Fire (buff), Piercing Shot (line projectile)
+- Mage: Fireball (area circle), Teleport (instant movement)
 - [ ] Ability visuals: Colored circles/rectangles for area effects (no animations)
 - [ ] Add ability cooldowns (text countdown or colored bar) - ask Cursor: "Add cooldown UI system"
 - [ ] Test: Players can fight and use abilities
@@ -479,9 +477,9 @@ game_demo/
 
 - [ ] Create base Support class - ask Cursor: "Create Support.gd with health, movement, and attack"
 - [ ] Implement 3 support types with visual blocks - ask Cursor: "Create Tank, DamageDealer, and Buffer support classes":
-  - **Tank Support**: Large gray/blue rectangle, high HP, high melee damage, slow movement, follows player within close range, walks to nearest enemy
-  - **Damage Support**: Small red square, low HP, high damage, fast movement, follows player within medium range, attacks nearest enemy with projectiles
-  - **Buffer Support**: Small yellow square with glow effect (colored outline), low HP, very low damage, medium movement, follows player within medium range, provides buffs via fixed-radius aura around player
+- **Tank Support**: Large gray/blue rectangle, high HP, high melee damage, slow movement, follows player within close range, walks to nearest enemy
+- **Damage Support**: Small red square, low HP, high damage, fast movement, follows player within medium range, attacks nearest enemy with projectiles
+- **Buffer Support**: Small yellow square with glow effect (colored outline), low HP, very low damage, medium movement, follows player within medium range, provides buffs via fixed-radius aura around player
 - [ ] Add support summoning (hotkeys 1, 2, 3) - spawns at player location - ask Cursor: "Add support summoning to PlayerController.gd"
 - [ ] Basic AI: Follow player within range, attack nearest enemy - ask Cursor: "Create SimpleSupportAI.gd with follow-within-range and attack-nearest-enemy behavior"
 - [ ] One-time use restriction (each support can only be summoned once, button grays out) - ask Cursor: "Add support usage tracking"
@@ -506,8 +504,8 @@ game_demo/
 - [ ] Implement spell selection (choose 1 from 2 available - click button) - ask Cursor: "Add spell selection with 2 options"
 - [ ] Add "Quick Start" option (auto-selects all, skips selection entirely) - ask Cursor: "Add quick start button"
 - [ ] Implement 2 big spells - ask Cursor: "Create BigSpell.gd with Area Blast and Massive Buff":
-  - **Area Blast**: Cast at mouse location, instant cast, large red circle appears, deals damage instantly, circle disappears after 0.5 seconds
-  - **Massive Buff**: Cast at mouse location, instant cast, large green circle appears, provides buffs to player and supports in area, circle stays visible for 3 seconds then disappears
+- **Area Blast**: Cast at mouse location, instant cast, large red circle appears, deals damage instantly, circle disappears after 0.5 seconds
+- **Massive Buff**: Cast at mouse location, instant cast, large green circle appears, provides buffs to player and supports in area, circle stays visible for 3 seconds then disappears
 - [ ] Big spell visuals: Colored circles (red for damage, green for buff) - instant appearance, no animation
 - [ ] Add big spell hotkey (R) - cast at mouse location, instant cast, one-time use, button grays out after use - ask Cursor: "Add R hotkey to PlayerController.gd that casts big spell at mouse location"
 - [ ] Add big spell cooldown UI - ask Cursor: "Add cooldown UI display for big spell"
@@ -541,11 +539,11 @@ game_demo/
 
 - [ ] Add damage numbers (text appears above units, fades out - simple text, no animation)
 - [ ] Ensure all visuals are blocks/circles:
-  - Heroes: Colored circles (blue/green/red)
-  - Supports: Colored rectangles/squares (gray/red/yellow)
-  - Obstacles: Gray rectangular blocks
-  - Projectiles: Small colored circles
-  - Abilities: Colored circles/rectangles for areas
+- Heroes: Colored circles (blue/green/red)
+- Supports: Colored rectangles/squares (gray/red/yellow)
+- Obstacles: Gray rectangular blocks
+- Projectiles: Small colored circles
+- Abilities: Colored circles/rectangles for areas
 - [ ] Add health bars above units (colored rectangles, green/red)
 - [ ] Add simple UI (ability cooldowns as text/numbers, support buttons as colored rectangles)
 - [ ] Add victory/defeat screen (simple text on colored background)
@@ -688,9 +686,9 @@ game_demo/
 **Follow Behavior**:
 
 - **Follow Distance**: Supports stay within a specific range of the player (different ranges for different support types)
-  - Tank: Closer follow range (stays near player)
-  - Damage Dealer: Medium follow range
-  - Buffer: Medium follow range
+- Tank: Closer follow range (stays near player)
+- Damage Dealer: Medium follow range
+- Buffer: Medium follow range
 
 **Attack Behavior**:
 
@@ -754,9 +752,7 @@ game_demo/
 
 ### Hero Abilities (Demo Design)
 
-**Note**: For demo purposes, ability mechanics can be designed flexibly. Below are suggested implementations:
-
-**Fighter Abilities**:
+**Note**: For demo purposes, ability mechanics can be designed flexibly. Below are suggested implementations:**Fighter Abilities**:
 
 - **Q - Dash**: Instant movement ability (can be click-to-dash or dash toward mouse)
 - **E - Shield Bash**: Area damage around hero or at target location
@@ -828,27 +824,26 @@ game_demo/
 **Connection Steps:**
 
 1. **Both players connect to same WiFi network** (your home WiFi)
-
 2. **Player 1 (Host - Your Computer)**:
 
-   - Launch game on your computer
-   - Click "Host Game" button
-   - Game displays your WiFi IP address in big text (e.g., "192.168.1.100")
-   - Tell Player 2 your IP address (or show them the screen)
+- Launch game on your computer
+- Click "Host Game" button
+- Game displays your WiFi IP address in big text (e.g., "192.168.1.100")
+- Tell Player 2 your IP address (or show them the screen)
 
 3. **Player 2 (Client - Friend's Computer)**:
 
-   - Launch game on friend's computer
-   - Click "Join Game" button
-   - Enter WiFi IP address from Player 1 (type it in the text field)
-   - Click "Connect" button
-   - Wait for "Connected!" message
+- Launch game on friend's computer
+- Click "Join Game" button
+- Enter WiFi IP address from Player 1 (type it in the text field)
+- Click "Connect" button
+- Wait for "Connected!" message
 
 4. **Both Players**:
 
-   - Once both see "Ready" or "Connected" status
-   - Click "Start Battle" button
-   - Game begins - each player controls their hero on their own computer screen!
+- Once both see "Ready" or "Connected" status
+- Click "Start Battle" button
+- Game begins - each player controls their hero on their own computer screen!
 
 **Why This Works:**
 
@@ -872,24 +867,24 @@ game_demo/
 
 1. **Open in Godot**:
 
-   - Launch Godot 4.x
-   - Open project folder
-   - Press F5 to run (or click Play button)
-   - Game runs in editor - quick iteration
+- Launch Godot 4.x
+- Open project folder
+- Press F5 to run (or click Play button)
+- Game runs in editor - quick iteration
 
 2. **Test Single-Player**:
 
-   - Use "Quick Start" mode
-   - Test all mechanics yourself
-   - Check for bugs before multiplayer testing
+- Use "Quick Start" mode
+- Test all mechanics yourself
+- Check for bugs before multiplayer testing
 
 3. **Test Multiplayer Locally**:
 
-   - Run game twice (two instances)
-   - First instance: Click "Host Game"
-   - Second instance: Click "Join Game", enter `localhost` or `127.0.0.1`
-   - Both windows show the same game
-   - Test connection and gameplay
+- Run game twice (two instances)
+- First instance: Click "Host Game"
+- Second instance: Click "Join Game", enter `localhost` or `127.0.0.1`
+- Both windows show the same game
+- Test connection and gameplay
 
 ### For Testing with Friends (Same Home/Network)
 
@@ -897,50 +892,48 @@ game_demo/
 
 1. **Export the Game** (One Time Setup):
 
-   - In Godot: Project → Export
-   - Select platform (Windows/Mac/Linux)
-   - Click "Export Project"
-   - Choose location (creates single .exe/.app file)
-   - No installation needed - just one file!
+- In Godot: Project → Export
+- Select platform (Windows/Mac/Linux)
+- Click "Export Project"
+- Choose location (creates single .exe/.app file)
+- No installation needed - just one file!
 
 2. **Share with Friends**:
 
-   - Copy exported file to USB drive
-   - Or upload to Google Drive/Dropbox and share link
-   - Friends download/copy the file
-   - **No installation** - just double-click to run
+- Copy exported file to USB drive
+- Or upload to Google Drive/Dropbox and share link
+- Friends download/copy the file
+- **No installation** - just double-click to run
 
 3. **Connect and Play** (2 Computers on Same WiFi):
 
-**Setup: Each player uses their own computer**
+**Setup: Each player uses their own computer**a. **Player 1 (Host - Your Computer)**:
 
-a. **Player 1 (Host - Your Computer)**:
-
-      - Launch game on your computer
-      - Click "Host Game" button
-      - Game shows WiFi IP address in big text (e.g., "192.168.1.100")
-      - Tell Player 2 the IP address (or show them the screen)
+    - Launch game on your computer
+    - Click "Host Game" button
+    - Game shows WiFi IP address in big text (e.g., "192.168.1.100")
+    - Tell Player 2 the IP address (or show them the screen)
 
 b. **Player 2 (Client - Friend's Computer)**:
 
-      - Launch game on friend's computer (separate computer)
-      - Click "Join Game" button
-      - Enter WiFi IP address from Player 1 (type it in)
-      - Click "Connect" button
-      - Wait for "Connected!" message
+    - Launch game on friend's computer (separate computer)
+    - Click "Join Game" button
+    - Enter WiFi IP address from Player 1 (type it in)
+    - Click "Connect" button
+    - Wait for "Connected!" message
 
 c. **Both Players**:
 
-      - Once both see "Ready" status
-      - Click "Start Battle" button
-      - Game begins! Each player controls their hero on their own computer
+    - Once both see "Ready" status
+    - Click "Start Battle" button
+    - Game begins! Each player controls their hero on their own computer
 
 4. **Quick Troubleshooting**:
 
-   - **Can't connect?** Make sure both computers are on same WiFi network (same router)
-   - **Firewall blocking?** Windows/Mac may ask to allow game - click "Allow"
-   - **Wrong IP?** WiFi IP should start with `192.168.x.x` or `10.x.x.x` (local network)
-   - **Still stuck?** Verify both computers show they're connected to WiFi in system settings
+- **Can't connect?** Make sure both computers are on same WiFi network (same router)
+- **Firewall blocking?** Windows/Mac may ask to allow game - click "Allow"
+- **Wrong IP?** WiFi IP should start with `192.168.x.x` or `10.x.x.x` (local network)
+- **Still stuck?** Verify both computers show they're connected to WiFi in system settings
 
 **Pro Tip:** Write down your computer's IP address before friends arrive - you can find it in:
 
@@ -953,30 +946,30 @@ c. **Both Players**:
 
 1. **In Godot**:
 
-   - Project → Export
-   - Select platform (Windows/Mac/Linux)
-   - Click "Export Project"
-   - Choose export location
-   - Creates single executable file
+- Project → Export
+- Select platform (Windows/Mac/Linux)
+- Click "Export Project"
+- Choose export location
+- Creates single executable file
 
 2. **For Windows**:
 
-   - Export as `.exe`
-   - Friends just double-click to run
-   - No installation needed
+- Export as `.exe`
+- Friends just double-click to run
+- No installation needed
 
 3. **For Mac**:
 
-   - Export as `.app`
-   - Friends double-click to run
-   - May need to allow in Security settings
+- Export as `.app`
+- Friends double-click to run
+- May need to allow in Security settings
 
 4. **Sharing**:
 
-   - Zip the exported file
-   - Upload to Google Drive/Dropbox
-   - Share link with friends
-   - Include README with controls
+- Zip the exported file
+- Upload to Google Drive/Dropbox
+- Share link with friends
+- Include README with controls
 
 ### Testing Checklist
 
@@ -1034,40 +1027,32 @@ c. **Both Players**:
 
 ## Success Criteria for Demo
 
-✅ **Playable**: Two players can complete a full match
-
-✅ **Core Mechanics Work**: Movement, combat, supports, spells, hero switching
-
-✅ **No Critical Bugs**: Game doesn't crash, win condition works
-
-✅ **Easy to Share**: Single file, friends can run without setup
-
-✅ **Fun to Test**: Core gameplay loop is engaging
+✅ **Playable**: Two players can complete a full match✅ **Core Mechanics Work**: Movement, combat, supports, spells, hero switching✅ **No Critical Bugs**: Game doesn't crash, win condition works✅ **Easy to Share**: Single file, friends can run without setup✅ **Fun to Test**: Core gameplay loop is engaging
 
 ## Post-Demo: What to Test & Gather Feedback
 
 1. **Gameplay Feel**:
 
-   - Is combat satisfying?
-   - Are supports useful?
-   - Is hero switching interesting?
-   - Is big spell impactful?
+- Is combat satisfying?
+- Are supports useful?
+- Is hero switching interesting?
+- Is big spell impactful?
 
 2. **Balance**:
 
-   - Are heroes balanced?
-   - Are supports too strong/weak?
-   - Is big spell too powerful?
+- Are heroes balanced?
+- Are supports too strong/weak?
+- Is big spell too powerful?
 
 3. **Controls**:
 
-   - Are controls intuitive?
-   - Any input issues?
+- Are controls intuitive?
+- Any input issues?
 
 4. **Fun Factor**:
 
-   - Is it fun to play?
-   - What would make it more fun?
+- Is it fun to play?
+- What would make it more fun?
 
 ## Next Steps After Demo
 
@@ -1087,14 +1072,14 @@ Based on feedback, decide:
 2. **Open Cursor AI**: Use Cursor as your code editor
 3. **Create New Godot Project**: 
 
-   - Open Godot, create new 2D project
-   - Save project in a folder
-   - Open that folder in Cursor AI
+- Open Godot, create new 2D project
+- Save project in a folder
+- Open that folder in Cursor AI
 
 4. **Configure Cursor for GDScript**:
 
-   - Cursor will recognize .gd files automatically
-   - Use Cursor's AI chat to ask for GDScript code
+- Cursor will recognize .gd files automatically
+- Use Cursor's AI chat to ask for GDScript code
 
 ### Working with Cursor AI
 
@@ -1156,4 +1141,3 @@ Based on feedback, decide:
 - Ask Cursor to explain GDScript syntax if needed
 - Use Cursor's codebase search to find related code
 - Ask Cursor to debug errors: "Why is this code not working?"
-- Use Cursor to refactor: "Make this code cleaner/more efficient"
