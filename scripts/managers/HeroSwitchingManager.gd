@@ -1,3 +1,4 @@
+class_name HeroSwitchingManager
 extends Node
 
 signal hero_selected(hero_type: String)

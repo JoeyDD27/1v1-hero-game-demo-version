@@ -31,9 +31,7 @@ func _ready():
 		camera.make_current()
 	
 	# Create hero switching manager
-	var script = load("res://scripts/managers/HeroSwitchingManager.gd")
-	hero_switching_manager = Node.new()
-	hero_switching_manager.set_script(script)
+	hero_switching_manager = HeroSwitchingManager.new()
 	hero_switching_manager.name = "HeroSwitchingManager"
 	hero_switching_manager.add_to_group("hero_switching_manager")
 	add_child(hero_switching_manager)
