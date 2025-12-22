@@ -59,11 +59,12 @@ func _physics_process(delta):
 	if not is_multiplayer_authority():
 		# Interpolate network position smoothly
 		# Only interpolate if we have a valid network position
+		var hero_radius = HERO_RADIUS  # Use local variable to avoid warning
 		if network_position.distance_to(Vector2.ZERO) > 1.0 or position.distance_to(Vector2.ZERO) < 1.0:
 			position = position.lerp(network_position, 0.5)
 			# Clamp network-synced position to bounds too
-			position.x = clamp(position.x, HERO_RADIUS, SCREEN_WIDTH - HERO_RADIUS)
-			position.y = clamp(position.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
+			position.x = clamp(position.x, hero_radius, SCREEN_WIDTH - hero_radius)
+			position.y = clamp(position.y, hero_radius, SCREEN_HEIGHT - hero_radius)
 		return
 	
 	# Handle movement
@@ -120,7 +121,8 @@ func _physics_process(delta):
 	network_update_timer += delta
 	if network_update_timer >= network_update_rate:
 		# Only sync if multiplayer is ready and we're the authority
-		if multiplayer.multiplayer_peer != null and is_multiplayer_authority() and is_inside_tree():
+		# Also check that we have a valid name (ensures node is properly replicated)
+		if multiplayer.multiplayer_peer != null and is_multiplayer_authority() and is_inside_tree() and name != "":
 			# Node is in tree and has authority, safe to call RPC
 			sync_position.rpc(position)
 		network_update_timer = 0.0
@@ -128,6 +130,9 @@ func _physics_process(delta):
 @rpc("any_peer", "call_local", "unreliable")
 func sync_position(pos: Vector2):
 	"""Syncs position across network"""
+	# Safety check: ensure node exists and is in tree
+	if not is_inside_tree():
+		return
 	# Only process if we're not the authority (we receive other players' positions)
 	if not is_multiplayer_authority():
 		network_position = pos

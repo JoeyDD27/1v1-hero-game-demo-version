@@ -91,21 +91,27 @@ func spawn_hero_for_peer(peer_id: int):
 	# Set player ID BEFORE adding to scene tree
 	hero.set_player_id(peer_id)
 	
-	# Add to scene tree FIRST
+	# Set multiplayer authority BEFORE adding to scene tree (important for replication)
+	hero.set_multiplayer_authority(peer_id)
+	
+	# Add to scene tree with force_readable_name for proper replication
 	var heroes_node = get_node_or_null("Heroes")
 	if heroes_node:
 		heroes_node.add_child(hero, true)
 	else:
 		add_child(hero, true)
 	
-	# Wait for hero to be fully initialized in scene tree
+	# Wait for hero to be fully initialized and replicated in scene tree
 	await get_tree().process_frame
 	await get_tree().process_frame
-	
-	# Set multiplayer authority AFTER node is in tree
-	hero.set_multiplayer_authority(peer_id)
+	await get_tree().process_frame  # Extra frame for replication
 	
 	heroes[peer_id] = hero
+	
+	# Notify ALL clients to spawn this hero (so RPC path resolution works)
+	# This ensures all heroes exist on all clients for proper RPC path resolution
+	if multiplayer.is_server():
+		spawn_hero_on_client.rpc(peer_id, spawn_point.position)
 	
 	# Debug: Verify hero is visible
 	print("Spawned hero for peer ", peer_id, " at ", spawn_point.position)
@@ -138,3 +144,48 @@ func request_hero_spawn():
 		if requesting_peer != 0 and not heroes.has(requesting_peer):
 			connected_peers.append(requesting_peer)
 			spawn_hero_for_peer(requesting_peer)
+
+@rpc("authority", "reliable")
+func spawn_hero_on_client(peer_id: int, spawn_pos: Vector2):
+	"""Server tells client to spawn a hero locally"""
+	# Only spawn if we don't already have this hero
+	if heroes.has(peer_id):
+		print("Hero already exists for peer ", peer_id, " on client")
+		return
+	
+	# Don't spawn on server (server already spawned it)
+	if multiplayer.is_server():
+		return
+	
+	# Find spawn points if needed
+	if spawn_points.is_empty():
+		for child in get_children():
+			if child is Marker2D:
+				spawn_points.append(child)
+	
+	# Create hero instance locally
+	var hero = hero_scene.instantiate()
+	hero.position = spawn_pos
+	hero.name = "Hero_" + str(peer_id)
+	
+	# Set player ID
+	hero.set_player_id(peer_id)
+	
+	# Set multiplayer authority (only the actual peer has authority)
+	hero.set_multiplayer_authority(peer_id)
+	
+	# Add to scene tree with force_readable_name for proper replication
+	var heroes_node = get_node_or_null("Heroes")
+	if heroes_node:
+		heroes_node.add_child(hero, true)
+	else:
+		add_child(hero, true)
+	
+	# Wait for initialization and replication
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+	
+	heroes[peer_id] = hero
+	print("Client spawned hero for peer ", peer_id, " at ", spawn_pos)
+	print("Hero authority: ", hero.get_multiplayer_authority(), " (should be ", peer_id, ")")
