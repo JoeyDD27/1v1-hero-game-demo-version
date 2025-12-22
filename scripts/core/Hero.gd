@@ -23,15 +23,15 @@ func _ready():
 	
 	# Set up visual representation (colored circle)
 	if not has_node("Visual"):
-		# Use Polygon2D to draw a circle
+		# Use Polygon2D to draw a large, visible circle
 		var visual = Polygon2D.new()
 		visual.name = "Visual"
 		var color = Color.BLUE if player_id == 1 else Color.RED
 		visual.color = color
 		
-		# Create circle polygon (approximation with many points)
+		# Create circle polygon with larger radius for better visibility
 		var points = PackedVector2Array()
-		var radius = 20.0
+		var radius = 30.0  # Larger radius for visibility
 		var point_count = 32
 		for i in range(point_count):
 			var angle = (i * 2.0 * PI) / point_count
@@ -42,10 +42,14 @@ func _ready():
 	# Initialize network position to current position
 	network_position = position
 	
-	# Sync initial position to all peers after a short delay
+	# Sync initial position after node is ready and multiplayer is set up
 	if is_multiplayer_authority() and multiplayer.multiplayer_peer != null:
-		await get_tree().create_timer(0.1).timeout
-		sync_position.rpc(position)
+		# Wait a couple frames to ensure node is fully in scene tree
+		await get_tree().process_frame
+		await get_tree().process_frame
+		# Only sync if we have a valid position
+		if position != Vector2.ZERO:
+			sync_position.rpc(position)
 
 func _physics_process(delta):
 	# Only process movement if this is the local player's hero
@@ -101,7 +105,9 @@ func _physics_process(delta):
 	# Sync position over network
 	network_update_timer += delta
 	if network_update_timer >= network_update_rate:
-		sync_position.rpc(position)
+		# Only sync if multiplayer is ready and we're the authority
+		if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+			sync_position.rpc(position)
 		network_update_timer = 0.0
 
 @rpc("any_peer", "call_local", "unreliable")
@@ -116,8 +122,10 @@ func sync_position(pos: Vector2):
 func set_player_id(id: int):
 	"""Sets the player ID and updates visual"""
 	player_id = id
+	var color = Color.BLUE if player_id == 1 else Color.RED
+	
 	if has_node("Visual"):
 		var visual = get_node("Visual")
 		if visual is Polygon2D:
-			visual.color = Color.BLUE if player_id == 1 else Color.RED
+			visual.color = color
 

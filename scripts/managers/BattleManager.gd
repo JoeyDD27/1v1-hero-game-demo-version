@@ -4,11 +4,20 @@ extends Node2D
 
 var spawn_points: Array[Marker2D] = []
 var heroes: Dictionary = {}  # peer_id -> hero instance
+var connected_peers: Array[int] = []
 
 func _ready():
 	# Wait for multiplayer to be ready
 	if multiplayer.multiplayer_peer == null:
 		return
+	
+	# Make sure camera is current
+	var camera = get_node_or_null("Camera2D")
+	if camera:
+		camera.current = true
+	
+	# Connect to multiplayer signals to track peers
+	multiplayer.peer_connected.connect(_on_peer_connected)
 	
 	# Find spawn points
 	for child in get_children():
@@ -29,6 +38,10 @@ func _ready():
 		add_child(spawn2)
 		spawn_points.append(spawn2)
 	
+	# Add server to connected peers
+	if multiplayer.is_server():
+		connected_peers.append(1)
+	
 	# Spawn heroes for connected players
 	if multiplayer.is_server():
 		# Server spawns for itself (peer 1)
@@ -38,52 +51,67 @@ func _ready():
 		await get_tree().create_timer(0.5).timeout
 		spawn_all_heroes()
 	else:
-		# Client spawns their own hero
-		var my_id = multiplayer.get_unique_id()
-		spawn_hero_for_peer(my_id)
-		# Request server to spawn all heroes
+		# Client waits for server to spawn their hero
+		# Don't spawn locally - let server handle it
 		request_hero_spawn.rpc_id(1)
+
+func _on_peer_connected(peer_id: int):
+	"""Track connected peers"""
+	if not connected_peers.has(peer_id):
+		connected_peers.append(peer_id)
+		print("Peer connected: ", peer_id)
+		# Spawn hero for newly connected peer
+		if multiplayer.is_server():
+			spawn_hero_for_peer(peer_id)
 
 func spawn_hero_for_peer(peer_id: int):
 	"""Spawns a hero for a specific peer"""
 	if heroes.has(peer_id):
+		print("Hero already exists for peer ", peer_id)
 		return  # Hero already spawned
 	
 	if spawn_points.is_empty():
 		print("No spawn points available!")
 		return
 	
-	# Determine spawn point
+	# Determine spawn point (server on left, clients on right)
 	var spawn_index = 0
 	if peer_id == 1:
-		spawn_index = 0
+		spawn_index = 0  # Server spawns on left
 	else:
-		spawn_index = min(1, spawn_points.size() - 1)
+		spawn_index = min(1, spawn_points.size() - 1)  # Clients spawn on right
 	
 	var spawn_point = spawn_points[spawn_index]
 	
 	# Create hero instance
 	var hero = hero_scene.instantiate()
 	hero.position = spawn_point.position
-	hero.set_player_id(peer_id)
-	hero.set_multiplayer_authority(peer_id)
 	hero.name = "Hero_" + str(peer_id)
 	
-	# Add to scene tree
+	# Add to scene tree FIRST so _ready() is called
 	var heroes_node = get_node_or_null("Heroes")
 	if heroes_node:
 		heroes_node.add_child(hero, true)
 	else:
 		add_child(hero, true)
 	
+	# Wait for hero to be fully initialized
+	await get_tree().process_frame
+	await get_tree().process_frame
+	
+	# Now set player ID and authority (after _ready() has run)
+	hero.set_player_id(peer_id)
+	hero.set_multiplayer_authority(peer_id)
+	
 	heroes[peer_id] = hero
 	
-	# Sync initial position immediately after spawning
-	if hero.is_multiplayer_authority():
-		await get_tree().process_frame
-		hero.sync_position.rpc(spawn_point.position)
-	
+	# Debug: Verify hero is visible
 	print("Spawned hero for peer ", peer_id, " at ", spawn_point.position)
+	print("Hero position: ", hero.position)
+	print("Hero has visual: ", hero.has_node("Visual"))
+	if hero.has_node("Visual"):
+		var visual = hero.get_node("Visual")
+		print("Visual color: ", visual.color if visual.has_method("get") else "N/A")
 
 func spawn_all_heroes():
 	"""Spawns heroes for all connected peers (server only)"""
@@ -94,16 +122,18 @@ func spawn_all_heroes():
 	if not heroes.has(1):
 		spawn_hero_for_peer(1)
 	
-	# Get connected peer IDs from multiplayer API
-	# In Godot 4, we need to track connected peers differently
-	# For now, spawn for common peer IDs (1 and 2)
-	for peer_id in [1, 2]:
+	# Spawn for all tracked connected peers
+	for peer_id in connected_peers:
 		if not heroes.has(peer_id):
 			spawn_hero_for_peer(peer_id)
 
 @rpc("any_peer", "call_local", "reliable")
 func request_hero_spawn():
-	"""Client requests server to spawn heroes"""
+	"""Client requests server to spawn their hero"""
 	if multiplayer.is_server():
-		spawn_all_heroes()
+		# Get the requesting peer's ID
+		var requesting_peer = multiplayer.get_remote_sender_id()
+		if requesting_peer != 0 and not heroes.has(requesting_peer):
+			connected_peers.append(requesting_peer)
+			spawn_hero_for_peer(requesting_peer)
 
