@@ -29,7 +29,7 @@ func register_player_heroes(player_id: int, heroes_array: Array):
 				heroes_array[i].set_process(false)
 				heroes_array[i].set_physics_process(false)
 	
-	dead_heroes[player_id] = Array[String]()
+	dead_heroes[player_id] = []
 
 func on_hero_died(player_id: int, hero_node):
 	"""Handle hero death"""
@@ -135,4 +135,3 @@ func all_heroes_dead(player_id: int):
 	var battle_manager = get_tree().get_first_node_in_group("battle_manager")
 	if battle_manager and battle_manager.has_method("on_player_defeated"):
 		battle_manager.on_player_defeated(player_id)
-
