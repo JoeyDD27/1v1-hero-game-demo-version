@@ -173,6 +173,12 @@ func _get_hero_color() -> Color:
 	return Color.WHITE
 
 func _physics_process(delta):
+	# Check if multiplayer is active before checking authority
+	if multiplayer.multiplayer_peer == null:
+		# No multiplayer, process normally (single player mode)
+		_process_local_movement(delta)
+		return
+	
 	# Only process movement if this is the local player's hero
 	if not is_multiplayer_authority():
 		# Interpolate network position smoothly
@@ -185,6 +191,11 @@ func _physics_process(delta):
 			position.y = clamp(position.y, hero_radius, SCREEN_HEIGHT - hero_radius)
 		return
 	
+	# Process local movement (we have authority)
+	_process_local_movement(delta)
+	
+func _process_local_movement(delta):
+	"""Process local movement and input (called when we have authority or no multiplayer)"""
 	# Update cooldowns
 	attack_cooldown = max(0.0, attack_cooldown - delta)
 	ability_q_cooldown = max(0.0, ability_q_cooldown - delta)
@@ -291,6 +302,9 @@ func sync_position(pos: Vector2):
 	# Safety check: ensure node exists and is in tree
 	if not is_inside_tree():
 		return
+	# Safety check: ensure multiplayer is active
+	if multiplayer.multiplayer_peer == null:
+		return
 	# Only process if we're not the authority (we receive other players' positions)
 	if not is_multiplayer_authority():
 		network_position = pos
@@ -322,7 +336,7 @@ func take_damage(amount: float):
 	
 	# Apply damage multiplier (for sudden death)
 	var battle_manager = get_tree().get_first_node_in_group("battle_manager")
-	if battle_manager and battle_manager.has("damage_multiplier"):
+	if battle_manager:
 		amount *= battle_manager.damage_multiplier
 	
 	current_health -= amount
@@ -372,6 +386,9 @@ func attack_toward_mouse():
 @rpc("any_peer", "call_local", "reliable")
 func perform_attack(direction: Vector2):
 	"""Perform attack in given direction"""
+	# Safety check: ensure multiplayer is active
+	if multiplayer.multiplayer_peer == null:
+		return
 	if not is_multiplayer_authority():
 		return  # Only process on authority
 	
@@ -473,6 +490,9 @@ func use_ability_e():
 @rpc("any_peer", "call_local", "reliable")
 func use_ability(ability: String):
 	"""Network sync for ability usage"""
+	# Safety check: ensure multiplayer is active
+	if multiplayer.multiplayer_peer == null:
+		return
 	if not is_multiplayer_authority():
 		return  # Visual effects only on non-authority
 

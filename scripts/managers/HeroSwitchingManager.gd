@@ -50,7 +50,7 @@ func on_hero_died(player_id: int, hero_node):
 	respawn_timers[player_id] = RESPAWN_DELAY
 	
 	# Show selection UI
-	if player_id == multiplayer.get_unique_id():
+	if multiplayer.multiplayer_peer != null and player_id == multiplayer.get_unique_id():
 		show_selection_ui(player_id)
 
 func show_selection_ui(player_id: int):
