@@ -274,6 +274,55 @@ func _update_effects():
 		effect_label.modulate = Color(0, 1, 1, 1)  # Cyan
 		effects_container.add_child(effect_label)
 
+func _update_hero_types():
+	"""Update player and enemy hero type displays"""
+	if not player_hero_type_label or not enemy_hero_type_label:
+		return
+	
+	# Player hero type
+	if local_hero and is_instance_valid(local_hero) and "hero_type" in local_hero:
+		player_hero_type_label.text = "Hero: " + local_hero.hero_type
+	else:
+		player_hero_type_label.text = "Hero: --"
+	
+	# Enemy hero type
+	if enemy_hero and is_instance_valid(enemy_hero) and "hero_type" in enemy_hero:
+		enemy_hero_type_label.text = "Hero: " + enemy_hero.hero_type
+	else:
+		enemy_hero_type_label.text = "Hero: --"
+
+func _update_attack_cooldown():
+	"""Update player attack cooldown display"""
+	if not player_attack_cooldown_label:
+		return
+	
+	if not local_hero or not is_instance_valid(local_hero):
+		player_attack_cooldown_label.text = "Attack: --"
+		return
+	
+	var attack_cd = local_hero.attack_cooldown if "attack_cooldown" in local_hero else 0.0
+	
+	if attack_cd > 0.0:
+		player_attack_cooldown_label.text = "Attack: %.1f" % attack_cd
+		player_attack_cooldown_label.modulate = Color(0.5, 0.5, 0.5, 1)
+	else:
+		player_attack_cooldown_label.text = "Attack: Ready"
+		player_attack_cooldown_label.modulate = Color(1, 1, 1, 1)
+
+func _update_player_info():
+	"""Update player and enemy info displays"""
+	if not player_info_label or not enemy_info_label:
+		return
+	
+	# Player info
+	if player_info_label:
+		player_info_label.text = "Player " + str(local_player_id)
+	
+	# Enemy info
+	if enemy_info_label:
+		var enemy_id = 1 if local_player_id == 2 else 2
+		enemy_info_label.text = "Player " + str(enemy_id)
+
 func _update_match_timer():
 	"""Update match timer display"""
 	if not match_timer_label:
