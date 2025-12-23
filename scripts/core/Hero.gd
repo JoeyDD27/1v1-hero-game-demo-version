@@ -592,6 +592,16 @@ func _show_area_indicator(pos: Vector2, radius_val: float, color: Color = Color(
 
 func _ranged_attack(direction: Vector2):
 	"""Ranged attack - spawn projectile"""
+	# Network sync: spawn projectile on server so all clients see it
+	if multiplayer.multiplayer_peer != null:
+		# Call RPC to spawn projectile on server (which will sync to all clients)
+		spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color())
+	else:
+		# Single player - spawn locally
+		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
+
+func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: int, proj_color: Color):
+	"""Spawn projectile locally (called on server or single player)"""
 	var projectile_scene = preload("res://scenes/Projectile.tscn")
 	var projectile = null
 	
@@ -602,9 +612,13 @@ func _ranged_attack(direction: Vector2):
 		projectile = preload("res://scripts/core/Projectile.gd").new()
 	
 	if projectile:
-		projectile.setup(direction, attack_damage, player_id, _get_projectile_color())
-		projectile.position = position
+		projectile.setup(dir, dmg, owner_id, proj_color)
+		projectile.position = pos
 		projectile.visible = true
+		
+		# Set multiplayer authority to server (for collision detection)
+		if multiplayer.multiplayer_peer != null:
+			projectile.set_multiplayer_authority(1)  # Server has authority
 		
 		# Add to scene tree - add to a Projectiles node if it exists, otherwise to battle scene
 		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
@@ -612,14 +626,20 @@ func _ranged_attack(direction: Vector2):
 			# Check if Projectiles node exists
 			var projectiles_node = battle_scene.get_node_or_null("Projectiles")
 			if projectiles_node:
-				projectiles_node.add_child(projectile)
+				projectiles_node.add_child(projectile, true)  # force_readable_name for network sync
 			else:
-				battle_scene.add_child(projectile)
+				battle_scene.add_child(projectile, true)
 		else:
-			get_tree().root.add_child(projectile)
+			get_tree().root.add_child(projectile, true)
 		
 		# Debug: Verify projectile was created
-		print("Projectile spawned at ", projectile.position, " with color ", _get_projectile_color())
+		print("Projectile spawned at ", projectile.position, " with color ", proj_color)
+
+@rpc("any_peer", "call_local", "reliable")
+func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, owner_id: int, proj_color: Color):
+	"""RPC to spawn projectile - spawns on all clients"""
+	# Spawn projectile on all clients (including server)
+	_spawn_projectile_local(direction, spawn_pos, dmg, owner_id, proj_color)
 
 func _get_projectile_color() -> Color:
 	"""Get projectile color based on hero type"""

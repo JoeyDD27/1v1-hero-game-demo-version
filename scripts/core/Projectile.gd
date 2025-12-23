@@ -14,6 +14,11 @@ var rotation_speed: float = 10.0  # Rotation speed for animation
 var pulse_scale: float = 1.0
 var pulse_direction: float = 1.0
 
+# Network sync
+var network_position: Vector2 = Vector2.ZERO
+var network_update_rate: float = 0.05  # Update every 50ms
+var network_update_timer: float = 0.0
+
 func _ready():
 	start_position = position
 	
@@ -99,6 +104,16 @@ func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Co
 		rotation = direction.angle() + PI / 2.0
 
 func _physics_process(delta):
+	# Network sync handling
+	if multiplayer.multiplayer_peer != null:
+		if not is_multiplayer_authority():
+			# Client: interpolate network position
+			position = position.lerp(network_position, 0.5)
+			# Still animate visuals
+			_animate_projectile(delta)
+			return
+	
+	# Authority (server or single player): process movement and collision
 	# Animate projectile (rotation and pulsing)
 	_animate_projectile(delta)
 	
@@ -110,13 +125,27 @@ func _physics_process(delta):
 	if direction.length() > 0:
 		rotation = direction.angle() + PI / 2.0  # Face direction of travel
 	
+	# Sync position to clients
+	if multiplayer.multiplayer_peer != null:
+		network_update_timer += delta
+		if network_update_timer >= network_update_rate:
+			if is_inside_tree() and name != "":
+				sync_projectile_position.rpc(position)
+			network_update_timer = 0.0
+	
 	# Check if traveled too far
 	if position.distance_to(start_position) > max_distance:
 		queue_free()
 		return
 	
-	# Check collision with enemies
+	# Check collision with enemies (only on authority)
 	_check_collisions()
+
+@rpc("authority", "call_local", "unreliable")
+func sync_projectile_position(pos: Vector2):
+	"""Sync projectile position to all clients"""
+	if not is_multiplayer_authority():
+		network_position = pos
 
 func _animate_projectile(delta):
 	"""Animate projectile with pulsing and rotation"""
@@ -145,7 +174,11 @@ func _animate_projectile(delta):
 		inner.rotation += rotation_speed * delta
 
 func _check_collisions():
-	"""Check for collisions with enemies"""
+	"""Check for collisions with enemies - only on server/authority"""
+	# Only check collisions on server/authority to avoid duplicate damage
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
+		return
+	
 	var space_state = get_world_2d().direct_space_state
 	var query = PhysicsShapeQueryParameters2D.new()
 	var shape = CircleShape2D.new()
@@ -169,5 +202,13 @@ func _check_collisions():
 					var is_invincible = body.get("is_invincible")
 					if is_invincible == null or not is_invincible:
 						body.take_damage(damage)
+						# Sync destruction to all clients
+						if multiplayer.multiplayer_peer != null:
+							destroy_projectile.rpc()
 						queue_free()
 						return
+
+@rpc("authority", "call_local", "reliable")
+func destroy_projectile():
+	"""Sync projectile destruction to all clients"""
+	queue_free()

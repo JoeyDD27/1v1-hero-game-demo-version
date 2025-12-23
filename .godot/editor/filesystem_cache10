@@ -1,5 +1,5 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1766528721
+::res://::1766528839
 icon.svg::CompressedTexture2D::2595000385491246249::1765869499::1765870315::1::::<><><>0<>0<>f9d8d6396481432c58535f37e27c6374<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 ::res://assets/::1765869222
 ::res://assets/fonts/::1765869222
@@ -32,7 +32,7 @@ HeroSwitchingManager.gd::GDScript::3556451416940907811::1766475843::0::1::::Hero
 MainMenu.gd::GDScript::2096932619020627971::1765870155::0::1::::<>Control<><>0<>0<><>::
 NetworkManager.gd::GDScript::3076296782583025991::1765870155::0::1::::<>Node<><>0<>0<><>::
 ::res://scripts/ui/::1766476748
-BattleUI.gd::GDScript::948035533915090250::1766528080::0::1::::<>Control<><>0<>0<><>::
+BattleUI.gd::GDScript::948035533915090250::1766528779::0::1::::<>Control<><>0<>0<><>::
 DamageNumber.gd::GDScript::2316210951784144841::1766474279::0::1::::<>Label<><>0<>0<><>::
 HealthBar.gd::GDScript::7565525179280392393::1766384132::0::1::::<>Node2D<><>0<>0<><>::
 HeroSelectionUI.gd::GDScript::297757245836524334::1766384132::0::1::::<>Control<><>0<>0<><>::
