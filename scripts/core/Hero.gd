@@ -439,10 +439,27 @@ func respawn(spawn_pos: Vector2):
 	spawn_protection = 3.0  # 3 seconds of invincibility
 	is_invincible = true
 	
-	# Sync respawn state to all clients
+	# Sync respawn state to all clients (only if node is in tree and properly set up)
 	if multiplayer.multiplayer_peer != null:
-		sync_health_rpc.rpc(current_health, max_health)
-		sync_death_state_rpc.rpc(is_dead)
+		# Ensure node is in tree and has valid name before calling RPCs
+		if is_inside_tree() and name != "":
+			# Ensure parent is also in tree (required for path resolution)
+			if get_parent() != null and get_parent().is_inside_tree():
+				sync_health_rpc.rpc(current_health, max_health)
+				sync_death_state_rpc.rpc(is_dead)
+			else:
+				# Parent not in tree, wait a frame and try again
+				await get_tree().process_frame
+				if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+					sync_health_rpc.rpc(current_health, max_health)
+					sync_death_state_rpc.rpc(is_dead)
+		else:
+			# Node not ready, wait and try again
+			await get_tree().process_frame
+			if is_inside_tree() and name != "":
+				if get_parent() != null and get_parent().is_inside_tree():
+					sync_health_rpc.rpc(current_health, max_health)
+					sync_death_state_rpc.rpc(is_dead)
 	
 	health_changed.emit(current_health, max_health)
 	print("Hero ", hero_type, " respawned at ", spawn_pos)

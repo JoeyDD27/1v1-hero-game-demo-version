@@ -78,29 +78,60 @@ func show_selection_ui(player_id: int):
 		selection_ui.show_selection(player_id, dead_list)
 
 func select_next_hero(player_id: int, hero_type: String):
-	"""Select next hero to switch to"""
+	"""Select next hero to switch to - call this when local player selects a hero"""
+	# Only allow the player who owns these heroes to initiate the switch
+	if multiplayer.multiplayer_peer != null:
+		var local_id = multiplayer.get_unique_id()
+		if player_id != local_id:
+			# Not the authority, shouldn't happen but handle gracefully
+			print("Warning: select_next_hero called for non-local player")
+			return
+	
+	# Perform switch locally first
+	_perform_hero_switch(player_id, hero_type)
+	
+	# Network sync to all clients (including ourselves via call_local)
+	if multiplayer.multiplayer_peer != null:
+		switch_hero.rpc(player_id, hero_type)
+	else:
+		# Single player, already processed
+		pass
+
+func _perform_hero_switch(player_id: int, hero_type: String):
+	"""Internal function that actually performs the hero switch"""
 	if not player_heroes.has(player_id):
+		print("Hero switch failed: No heroes registered for player ", player_id)
 		return
 	
 	# Check if hero type is already dead
+	if not dead_heroes.has(player_id):
+		dead_heroes[player_id] = []
 	if dead_heroes[player_id].has(hero_type):
+		print("Hero switch failed: Hero type ", hero_type, " is already dead for player ", player_id)
 		return
 	
 	# Find hero of this type
 	var heroes = player_heroes[player_id]
 	var new_hero = null
 	for hero in heroes:
-		if hero.hero_type == hero_type and not hero.is_dead:
-			new_hero = hero
-			break
+		if hero and is_instance_valid(hero) and hero.is_inside_tree():
+			if hero.hero_type == hero_type and not hero.is_dead:
+				new_hero = hero
+				break
 	
 	if not new_hero:
+		print("Hero switch failed: Could not find valid hero of type ", hero_type, " for player ", player_id)
+		return
+	
+	# Ensure node is in tree before accessing
+	if not new_hero.is_inside_tree():
+		print("Hero switch failed: Hero node not in tree for player ", player_id)
 		return
 	
 	# Deactivate current hero
 	if active_hero.has(player_id) and active_hero[player_id]:
 		var old_hero = active_hero[player_id]
-		if is_instance_valid(old_hero):
+		if is_instance_valid(old_hero) and old_hero.is_inside_tree():
 			old_hero.visible = false
 			old_hero.set_process(false)
 			old_hero.set_physics_process(false)
@@ -111,17 +142,37 @@ func select_next_hero(player_id: int, hero_type: String):
 	new_hero.set_process(true)
 	new_hero.set_physics_process(true)
 	
-	# Respawn at spawn position
-	var spawn_pos = get_spawn_position(player_id)
-	new_hero.respawn(spawn_pos)
+	# Update BattleManager's active_heroes dictionary
+	var battle_manager = get_tree().get_first_node_in_group("battle_manager")
+	if battle_manager and battle_manager.has_method("set_active_hero"):
+		battle_manager.set_active_hero(player_id, new_hero)
+	elif battle_manager and "active_heroes" in battle_manager:
+		battle_manager.active_heroes[player_id] = new_hero
 	
-	# Hide selection UI
-	var selection_ui = get_tree().get_first_node_in_group("hero_selection_ui")
-	if selection_ui:
-		selection_ui.hide_selection()
+	# Respawn at spawn position (only if we have authority - will sync via RPC)
+	var has_authority = true
+	if multiplayer.multiplayer_peer != null:
+		has_authority = new_hero.is_multiplayer_authority()
 	
-	# Network sync
-	switch_hero.rpc(player_id, hero_type)
+	if has_authority:
+		# We have authority, respawn will sync to others via RPC
+		var spawn_pos = get_spawn_position(player_id)
+		new_hero.respawn(spawn_pos)
+	# If not authority, the respawn will be synced from authority via RPC
+	
+	# Hide selection UI (only for local player)
+	if multiplayer.multiplayer_peer != null:
+		var local_id = multiplayer.get_unique_id()
+		if player_id == local_id:
+			var selection_ui = get_tree().get_first_node_in_group("hero_selection_ui")
+			if selection_ui:
+				selection_ui.hide_selection()
+	else:
+		var selection_ui = get_tree().get_first_node_in_group("hero_selection_ui")
+		if selection_ui:
+			selection_ui.hide_selection()
+	
+	print("Switched to hero ", hero_type, " for player ", player_id)
 
 func get_spawn_position(player_id: int) -> Vector2:
 	"""Get spawn position for player"""
@@ -137,9 +188,21 @@ func get_spawn_position(player_id: int) -> Vector2:
 
 @rpc("any_peer", "call_local", "reliable")
 func switch_hero(player_id: int, hero_type: String):
-	"""Network sync for hero switching"""
-	# This is handled locally, but we sync to ensure all clients see the switch
-	pass
+	"""Network sync for hero switching - executes on all clients"""
+	# Skip if we're the authority (already processed locally via select_next_hero)
+	# call_local means this runs on sender too, but we already did _perform_hero_switch
+	if multiplayer.multiplayer_peer != null:
+		var local_id = multiplayer.get_unique_id()
+		if player_id == local_id:
+			# Check if we already have this hero active to prevent double processing
+			if active_hero.has(player_id) and active_hero[player_id]:
+				var current = active_hero[player_id]
+				if is_instance_valid(current) and current.hero_type == hero_type:
+					# Already switched, skip
+					return
+	
+	# Process the switch on remote clients (or if somehow we didn't process locally)
+	_perform_hero_switch(player_id, hero_type)
 
 @rpc("any_peer", "call_local", "reliable")
 func all_heroes_dead(player_id: int):
