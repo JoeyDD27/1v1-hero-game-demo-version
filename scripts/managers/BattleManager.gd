@@ -47,6 +47,18 @@ func _ready():
 	var selection_ui = hero_selection_ui_scene.instantiate()
 	add_child(selection_ui)
 	
+	# Create battle UI
+	var battle_ui_scene = preload("res://scenes/ui/BattleUI.tscn")
+	var battle_ui = battle_ui_scene.instantiate()
+	var local_player_id = multiplayer.get_unique_id() if multiplayer.multiplayer_peer != null else 1
+	battle_ui.setup(local_player_id)
+	add_child(battle_ui)
+	
+	# Create victory screen
+	var victory_screen_scene = preload("res://scenes/ui/VictoryScreen.tscn")
+	var victory_screen = victory_screen_scene.instantiate()
+	add_child(victory_screen)
+	
 	# Connect to multiplayer signals to track peers
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	
@@ -237,14 +249,13 @@ func show_victory_screen(defeated_player_id: int):
 	"""Show victory/defeat screen"""
 	var winner_id = 1 if defeated_player_id == 2 else 2
 	var local_id = multiplayer.get_unique_id() if multiplayer.multiplayer_peer != null else 1
-	var is_winner = local_id == winner_id
 	
 	print("Player ", winner_id, " wins! Player ", defeated_player_id, " defeated.")
-	if is_winner:
-		print("VICTORY!")
-	else:
-		print("DEFEAT!")
-	# TODO: Create victory/defeat UI
+	
+	# Show victory screen UI
+	var victory_screen = get_tree().get_first_node_in_group("victory_screen")
+	if victory_screen and victory_screen.has_method("show_victory"):
+		victory_screen.show_victory(winner_id, local_id)
 
 func _check_win_condition():
 	"""Check if any player has won"""

@@ -507,6 +507,9 @@ func perform_attack(direction: Vector2):
 
 func _melee_attack(direction: Vector2):
 	"""Melee attack - cone/line attack in direction"""
+	# Show melee attack indicator
+	_show_melee_indicator(direction)
+	
 	# Find enemies in attack range and direction
 	var space_state = get_world_2d().direct_space_state
 	var query = PhysicsShapeQueryParameters2D.new()
@@ -544,6 +547,27 @@ func _melee_attack(direction: Vector2):
 				var distance = position.distance_to(body.global_position)
 				if distance <= attack_range:
 					body.take_damage(attack_damage)
+
+func _show_melee_indicator(direction: Vector2):
+	"""Show visual indicator for melee attack"""
+	var indicator_scene = preload("res://scenes/MeleeAttackIndicator.tscn")
+	var indicator = null
+	
+	if indicator_scene:
+		indicator = indicator_scene.instantiate()
+	else:
+		indicator = preload("res://scripts/core/MeleeAttackIndicator.gd").new()
+	
+	if indicator:
+		indicator.setup(attack_range, direction)
+		indicator.position = position
+		
+		# Add to scene tree
+		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
+		if battle_scene:
+			battle_scene.add_child(indicator)
+		else:
+			get_tree().root.add_child(indicator)
 
 func _ranged_attack(direction: Vector2):
 	"""Ranged attack - spawn projectile"""

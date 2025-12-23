@@ -21,18 +21,29 @@ func _ready():
 		collision.shape = shape
 		add_child(collision)
 	
-	# Set up visual
+	# Set up visual - make it more visible
 	if not has_node("Visual"):
 		var visual = Polygon2D.new()
 		visual.name = "Visual"
 		visual.color = Color.YELLOW
 		var points = PackedVector2Array()
-		var point_count = 16
+		var point_count = 32  # More points for smoother circle
 		for i in range(point_count):
 			var angle = (i * 2.0 * PI) / point_count
 			points.append(Vector2(cos(angle) * PROJECTILE_RADIUS, sin(angle) * PROJECTILE_RADIUS))
 		visual.polygon = points
 		add_child(visual)
+		
+		# Add outline for better visibility
+		var outline = Polygon2D.new()
+		outline.name = "Outline"
+		outline.color = Color(1, 0.8, 0, 1)  # Orange outline
+		var outline_points = PackedVector2Array()
+		for i in range(point_count):
+			var angle = (i * 2.0 * PI) / point_count
+			outline_points.append(Vector2(cos(angle) * (PROJECTILE_RADIUS + 2), sin(angle) * (PROJECTILE_RADIUS + 2)))
+		outline.polygon = outline_points
+		add_child(outline)
 
 func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Color.YELLOW):
 	"""Setup projectile"""
@@ -44,6 +55,12 @@ func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Co
 	var visual = get_node_or_null("Visual")
 	if visual is Polygon2D:
 		visual.color = projectile_color
+	
+	# Update outline color to match
+	var outline = get_node_or_null("Outline")
+	if outline is Polygon2D:
+		# Make outline slightly darker version of projectile color
+		outline.color = projectile_color.darkened(0.3)
 
 func _physics_process(delta):
 	# Move projectile
