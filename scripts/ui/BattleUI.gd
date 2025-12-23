@@ -35,15 +35,14 @@ func _find_heroes():
 		return
 	
 	# Find local hero
-	if battle_manager.has("active_heroes"):
-		if battle_manager.active_heroes.has(local_player_id):
-			local_hero = battle_manager.active_heroes[local_player_id]
-		
-		# Find enemy hero (other player)
-		for peer_id in battle_manager.active_heroes:
-			if peer_id != local_player_id:
-				enemy_hero = battle_manager.active_heroes[peer_id]
-				break
+	if battle_manager.active_heroes.has(local_player_id):
+		local_hero = battle_manager.active_heroes[local_player_id]
+	
+	# Find enemy hero (other player)
+	for peer_id in battle_manager.active_heroes:
+		if peer_id != local_player_id:
+			enemy_hero = battle_manager.active_heroes[peer_id]
+			break
 	
 	# If heroes not found, try to find them in scene tree
 	if not local_hero or not is_instance_valid(local_hero):
@@ -52,7 +51,7 @@ func _find_heroes():
 			var heroes = heroes_node.get_node_or_null("Heroes")
 			if heroes:
 				for hero in heroes.get_children():
-					if hero.has("player_id") and hero.player_id == local_player_id and hero.has("is_dead") and not hero.is_dead:
+					if "player_id" in hero and hero.player_id == local_player_id and "is_dead" in hero and not hero.is_dead:
 						local_hero = hero
 						break
 	
@@ -62,7 +61,7 @@ func _find_heroes():
 			var heroes = heroes_node.get_node_or_null("Heroes")
 			if heroes:
 				for hero in heroes.get_children():
-					if hero.has("player_id") and hero.player_id != local_player_id and hero.has("is_dead") and not hero.is_dead:
+					if "player_id" in hero and hero.player_id != local_player_id and "is_dead" in hero and not hero.is_dead:
 						enemy_hero = hero
 						break
 
@@ -158,4 +157,3 @@ func _update_match_timer():
 		match_timer_label.modulate = Color(1, 1, 1, 1)  # White
 	
 	match_timer_label.text = timer_text
-
