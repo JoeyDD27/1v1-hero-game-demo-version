@@ -51,8 +51,8 @@ func _ready():
 	var battle_ui_scene = preload("res://scenes/ui/BattleUI.tscn")
 	var battle_ui = battle_ui_scene.instantiate()
 	var local_player_id = multiplayer.get_unique_id() if multiplayer.multiplayer_peer != null else 1
-	battle_ui.setup(local_player_id)
 	add_child(battle_ui)
+	battle_ui.setup(local_player_id)
 	
 	# Create victory screen
 	var victory_screen_scene = preload("res://scenes/ui/VictoryScreen.tscn")

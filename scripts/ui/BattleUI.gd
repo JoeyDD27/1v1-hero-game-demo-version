@@ -26,6 +26,10 @@ func setup(player_id: int):
 
 func _find_heroes():
 	"""Find local and enemy heroes"""
+	# Ensure node is in tree before accessing scene tree
+	if not is_inside_tree():
+		return
+	
 	var battle_manager = get_tree().get_first_node_in_group("battle_manager")
 	if not battle_manager:
 		return
