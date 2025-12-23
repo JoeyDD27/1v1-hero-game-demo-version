@@ -569,6 +569,27 @@ func _show_melee_indicator(direction: Vector2):
 		else:
 			get_tree().root.add_child(indicator)
 
+func _show_area_indicator(pos: Vector2, radius_val: float, color: Color = Color(1, 0, 0, 0.5)):
+	"""Show visual indicator for area attack"""
+	var indicator_scene = preload("res://scenes/AreaAttackIndicator.tscn")
+	var indicator = null
+	
+	if indicator_scene:
+		indicator = indicator_scene.instantiate()
+	else:
+		indicator = preload("res://scripts/core/AreaAttackIndicator.gd").new()
+	
+	if indicator:
+		indicator.setup(radius_val, color)
+		indicator.position = pos
+		
+		# Add to scene tree
+		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
+		if battle_scene:
+			battle_scene.add_child(indicator)
+		else:
+			get_tree().root.add_child(indicator)
+
 func _ranged_attack(direction: Vector2):
 	"""Ranged attack - spawn projectile"""
 	var projectile_scene = preload("res://scenes/Projectile.tscn")
@@ -676,6 +697,9 @@ func ability_shield_bash():
 	var bash_radius = 150.0
 	var bash_damage = attack_damage * 1.5
 	
+	# Show area indicator
+	_show_area_indicator(position, bash_radius, Color(1, 0.5, 0, 0.5))  # Orange
+	
 	var space_state = get_world_2d().direct_space_state
 	var query = PhysicsShapeQueryParameters2D.new()
 	var shape = CircleShape2D.new()
@@ -765,6 +789,9 @@ func ability_fireball():
 	var mouse_pos = get_global_mouse_position()
 	var fireball_radius = 100.0
 	var fireball_damage = attack_damage * 2.0
+	
+	# Show area indicator at target location
+	_show_area_indicator(mouse_pos, fireball_radius, Color(1, 0, 0, 0.5))  # Red
 	
 	var space_state = get_world_2d().direct_space_state
 	var query = PhysicsShapeQueryParameters2D.new()

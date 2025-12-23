@@ -17,6 +17,10 @@ func _ready():
 	visible = true
 
 func _process(_delta):
+	# Continuously try to find heroes if not found yet
+	if not local_hero or not is_instance_valid(local_hero) or not enemy_hero or not is_instance_valid(enemy_hero):
+		_find_heroes()
+	
 	_update_ui()
 
 func setup(player_id: int):
@@ -74,13 +78,16 @@ func _update_ui():
 
 func _update_ability_cooldowns():
 	"""Update ability cooldown displays"""
+	if not ability_q_label or not ability_e_label:
+		return
+	
 	if not local_hero or not is_instance_valid(local_hero):
 		ability_q_label.text = "Q: --"
 		ability_e_label.text = "E: --"
 		return
 	
-	var q_cd = local_hero.ability_q_cooldown
-	var e_cd = local_hero.ability_e_cooldown
+	var q_cd = local_hero.ability_q_cooldown if "ability_q_cooldown" in local_hero else 0.0
+	var e_cd = local_hero.ability_e_cooldown if "ability_e_cooldown" in local_hero else 0.0
 	
 	if q_cd > 0.0:
 		ability_q_label.text = "Q: %.1f" % q_cd
@@ -98,15 +105,18 @@ func _update_ability_cooldowns():
 
 func _update_hp_display():
 	"""Update player and enemy HP displays"""
+	if not player_hp_label or not enemy_hp_label:
+		return
+	
 	# Player HP
-	if local_hero and is_instance_valid(local_hero):
+	if local_hero and is_instance_valid(local_hero) and "current_health" in local_hero and "max_health" in local_hero:
 		var hp_percent = (local_hero.current_health / local_hero.max_health) * 100.0
 		player_hp_label.text = "Player HP: %d/%d (%.0f%%)" % [int(local_hero.current_health), int(local_hero.max_health), hp_percent]
 	else:
 		player_hp_label.text = "Player HP: --"
 	
 	# Enemy HP
-	if enemy_hero and is_instance_valid(enemy_hero):
+	if enemy_hero and is_instance_valid(enemy_hero) and "current_health" in enemy_hero and "max_health" in enemy_hero:
 		var hp_percent = (enemy_hero.current_health / enemy_hero.max_health) * 100.0
 		enemy_hp_label.text = "Enemy HP: %d/%d (%.0f%%)" % [int(enemy_hero.current_health), int(enemy_hero.max_health), hp_percent]
 	else:
@@ -114,6 +124,9 @@ func _update_hp_display():
 
 func _update_effects():
 	"""Update active effects display"""
+	if not effects_container:
+		return
+	
 	# Clear existing effect labels (keep the header)
 	var children = effects_container.get_children()
 	for child in children:
@@ -124,15 +137,15 @@ func _update_effects():
 		return
 	
 	# Check for Rapid Fire (Shooter Q)
-	if local_hero.has("rapid_fire_active") and local_hero.rapid_fire_active:
+	if "rapid_fire_active" in local_hero and local_hero.rapid_fire_active:
 		var effect_label = Label.new()
-		var time_left = local_hero.rapid_fire_timer if local_hero.has("rapid_fire_timer") else 0.0
+		var time_left = local_hero.rapid_fire_timer if "rapid_fire_timer" in local_hero else 0.0
 		effect_label.text = "Rapid Fire: %.1fs" % time_left
 		effect_label.modulate = Color(0, 1, 0, 1)  # Green
 		effects_container.add_child(effect_label)
 	
 	# Check for spawn protection
-	if local_hero.has("spawn_protection") and local_hero.spawn_protection > 0.0:
+	if "spawn_protection" in local_hero and local_hero.spawn_protection > 0.0:
 		var effect_label = Label.new()
 		effect_label.text = "Spawn Protection: %.1fs" % local_hero.spawn_protection
 		effect_label.modulate = Color(0, 1, 1, 1)  # Cyan
@@ -140,17 +153,20 @@ func _update_effects():
 
 func _update_match_timer():
 	"""Update match timer display"""
+	if not match_timer_label:
+		return
+	
 	var battle_manager = get_tree().get_first_node_in_group("battle_manager")
 	if not battle_manager:
 		match_timer_label.text = "--:--"
 		return
 	
-	var timer = battle_manager.match_timer
+	var timer = battle_manager.match_timer if "match_timer" in battle_manager else 600.0
 	var minutes = int(timer / 60.0)
 	var seconds = int(timer) % 60
 	
 	var timer_text = "%02d:%02d" % [minutes, seconds]
-	if battle_manager.sudden_death:
+	if "sudden_death" in battle_manager and battle_manager.sudden_death:
 		timer_text += " (SUDDEN DEATH!)"
 		match_timer_label.modulate = Color(1, 0, 0, 1)  # Red
 	else:
