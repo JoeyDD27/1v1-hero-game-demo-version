@@ -37,6 +37,13 @@ func _ready():
 		heroes_node.name = "Heroes"
 		add_child(heroes_node)
 	
+	# Create Projectiles node for better organization
+	var projectiles_node = get_node_or_null("Projectiles")
+	if not projectiles_node:
+		projectiles_node = Node2D.new()
+		projectiles_node.name = "Projectiles"
+		add_child(projectiles_node)
+	
 	# Create hero switching manager
 	hero_switching_manager = HeroSwitchingManager.new()
 	hero_switching_manager.name = "HeroSwitchingManager"

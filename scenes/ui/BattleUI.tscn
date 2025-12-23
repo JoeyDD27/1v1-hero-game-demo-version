@@ -22,10 +22,29 @@ offset_right = 300.0
 offset_bottom = -20.0
 grow_vertical = 0
 
+[node name="PlayerInfo" type="Label" parent="TopLeft"]
+layout_mode = 2
+text = "Player 1"
+theme_override_colors/font_color = Color(0.8, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="PlayerHeroType" type="Label" parent="TopLeft"]
+layout_mode = 2
+text = "Hero: --"
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 18
+
 [node name="PlayerHP" type="Label" parent="TopLeft"]
 layout_mode = 2
 text = "Player HP: --"
 theme_override_colors/font_color = Color(0, 1, 0, 1)
+theme_override_font_sizes/font_size = 20
+
+[node name="AttackCooldown" type="Label" parent="TopLeft"]
+layout_mode = 2
+text = "Attack: Ready"
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 16
 
 [node name="TopRight" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -41,11 +60,26 @@ offset_bottom = -20.0
 grow_horizontal = 0
 grow_vertical = 0
 
+[node name="EnemyInfo" type="Label" parent="TopRight"]
+layout_mode = 2
+text = "Player 2"
+horizontal_alignment = 2
+theme_override_colors/font_color = Color(1, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="EnemyHeroType" type="Label" parent="TopRight"]
+layout_mode = 2
+text = "Hero: --"
+horizontal_alignment = 2
+theme_override_colors/font_color = Color(1, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 18
+
 [node name="EnemyHP" type="Label" parent="TopRight"]
 layout_mode = 2
 text = "Enemy HP: --"
 horizontal_alignment = 2
 theme_override_colors/font_color = Color(1, 0, 0, 1)
+theme_override_font_sizes/font_size = 20
 
 [node name="TopCenter" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -111,12 +145,21 @@ size_flags_horizontal = 3
 layout_mode = 2
 text = "Q Ability"
 horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+
+[node name="AbilityName" type="Label" parent="HBoxContainer/AbilityQ"]
+layout_mode = 2
+text = "Ability Name"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_font_sizes/font_size = 14
 
 [node name="CooldownLabel" type="Label" parent="HBoxContainer/AbilityQ"]
 layout_mode = 2
 text = "Q: Ready"
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
 
 [node name="AbilityE" type="VBoxContainer" parent="HBoxContainer"]
 layout_mode = 2
@@ -126,10 +169,19 @@ size_flags_horizontal = 3
 layout_mode = 2
 text = "E Ability"
 horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+
+[node name="AbilityName" type="Label" parent="HBoxContainer/AbilityE"]
+layout_mode = 2
+text = "Ability Name"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_font_sizes/font_size = 14
 
 [node name="CooldownLabel" type="Label" parent="HBoxContainer/AbilityE"]
 layout_mode = 2
 text = "E: Ready"
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
 

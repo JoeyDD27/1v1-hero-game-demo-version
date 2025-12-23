@@ -8,7 +8,11 @@ var direction: Vector2 = Vector2.ZERO
 var start_position: Vector2 = Vector2.ZERO
 var owner_peer_id: int = 0
 
-const PROJECTILE_RADIUS = 5.0
+const PROJECTILE_RADIUS = 10.0  # Increased size for better visibility
+
+var rotation_speed: float = 10.0  # Rotation speed for animation
+var pulse_scale: float = 1.0
+var pulse_direction: float = 1.0
 
 func _ready():
 	start_position = position
@@ -23,27 +27,43 @@ func _ready():
 	
 	# Set up visual - make it more visible
 	if not has_node("Visual"):
-		var visual = Polygon2D.new()
-		visual.name = "Visual"
-		visual.color = Color.YELLOW
-		var points = PackedVector2Array()
-		var point_count = 32  # More points for smoother circle
-		for i in range(point_count):
-			var angle = (i * 2.0 * PI) / point_count
-			points.append(Vector2(cos(angle) * PROJECTILE_RADIUS, sin(angle) * PROJECTILE_RADIUS))
-		visual.polygon = points
-		add_child(visual)
-		
-		# Add outline for better visibility
-		var outline = Polygon2D.new()
-		outline.name = "Outline"
-		outline.color = Color(1, 0.8, 0, 1)  # Orange outline
-		var outline_points = PackedVector2Array()
-		for i in range(point_count):
-			var angle = (i * 2.0 * PI) / point_count
-			outline_points.append(Vector2(cos(angle) * (PROJECTILE_RADIUS + 2), sin(angle) * (PROJECTILE_RADIUS + 2)))
-		outline.polygon = outline_points
-		add_child(outline)
+		_create_visual()
+
+func _create_visual():
+	"""Create visual representation of projectile"""
+	var visual = Polygon2D.new()
+	visual.name = "Visual"
+	visual.color = Color.YELLOW
+	var points = PackedVector2Array()
+	var point_count = 32  # More points for smoother circle
+	for i in range(point_count):
+		var angle = (i * 2.0 * PI) / point_count
+		points.append(Vector2(cos(angle) * PROJECTILE_RADIUS, sin(angle) * PROJECTILE_RADIUS))
+	visual.polygon = points
+	add_child(visual)
+	
+	# Add outline for better visibility
+	var outline = Polygon2D.new()
+	outline.name = "Outline"
+	outline.color = Color(1, 0.8, 0, 1)  # Orange outline
+	var outline_points = PackedVector2Array()
+	var point_count_outline = 32
+	for i in range(point_count_outline):
+		var angle = (i * 2.0 * PI) / point_count_outline
+		outline_points.append(Vector2(cos(angle) * (PROJECTILE_RADIUS + 3), sin(angle) * (PROJECTILE_RADIUS + 3)))
+	outline.polygon = outline_points
+	add_child(outline)
+	
+	# Add inner glow for better visibility
+	var inner = Polygon2D.new()
+	inner.name = "Inner"
+	inner.color = Color(1, 1, 0.5, 0.8)  # Bright yellow inner
+	var inner_points = PackedVector2Array()
+	for i in range(point_count):
+		var angle = (i * 2.0 * PI) / point_count
+		inner_points.append(Vector2(cos(angle) * (PROJECTILE_RADIUS * 0.6), sin(angle) * (PROJECTILE_RADIUS * 0.6)))
+	inner.polygon = inner_points
+	add_child(inner)
 
 func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Color.YELLOW):
 	"""Setup projectile"""
@@ -51,21 +71,44 @@ func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Co
 	damage = dmg
 	owner_peer_id = owner_id
 	
+	# Ensure visual is created if scene doesn't have it
+	if not has_node("Visual"):
+		_create_visual()
+	
 	# Set visual color
 	var visual = get_node_or_null("Visual")
 	if visual is Polygon2D:
 		visual.color = projectile_color
+		visual.visible = true
 	
 	# Update outline color to match
 	var outline = get_node_or_null("Outline")
 	if outline is Polygon2D:
 		# Make outline slightly darker version of projectile color
 		outline.color = projectile_color.darkened(0.3)
+		outline.visible = true
+	
+	# Update inner glow color
+	var inner = get_node_or_null("Inner")
+	if inner is Polygon2D:
+		inner.color = projectile_color.lightened(0.3)
+		inner.visible = true
+	
+	# Rotate to face direction
+	if direction.length() > 0:
+		rotation = direction.angle() + PI / 2.0
 
 func _physics_process(delta):
+	# Animate projectile (rotation and pulsing)
+	_animate_projectile(delta)
+	
 	# Move projectile
 	velocity = direction * speed
 	move_and_slide()
+	
+	# Rotate projectile in direction of movement
+	if direction.length() > 0:
+		rotation = direction.angle() + PI / 2.0  # Face direction of travel
 	
 	# Check if traveled too far
 	if position.distance_to(start_position) > max_distance:
@@ -74,6 +117,32 @@ func _physics_process(delta):
 	
 	# Check collision with enemies
 	_check_collisions()
+
+func _animate_projectile(delta):
+	"""Animate projectile with pulsing and rotation"""
+	# Pulsing animation
+	pulse_scale += pulse_direction * delta * 3.0
+	if pulse_scale > 1.2:
+		pulse_scale = 1.2
+		pulse_direction = -1.0
+	elif pulse_scale < 0.9:
+		pulse_scale = 0.9
+		pulse_direction = 1.0
+	
+	# Apply pulsing scale to visual elements
+	var visual = get_node_or_null("Visual")
+	if visual:
+		visual.scale = Vector2(pulse_scale, pulse_scale)
+	
+	var outline = get_node_or_null("Outline")
+	if outline:
+		outline.scale = Vector2(pulse_scale, pulse_scale)
+	
+	var inner = get_node_or_null("Inner")
+	if inner:
+		inner.scale = Vector2(pulse_scale, pulse_scale)
+		# Rotate inner for spinning effect
+		inner.rotation += rotation_speed * delta
 
 func _check_collisions():
 	"""Check for collisions with enemies"""

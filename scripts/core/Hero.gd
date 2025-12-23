@@ -604,13 +604,22 @@ func _ranged_attack(direction: Vector2):
 	if projectile:
 		projectile.setup(direction, attack_damage, player_id, _get_projectile_color())
 		projectile.position = position
+		projectile.visible = true
 		
-		# Add to scene tree
+		# Add to scene tree - add to a Projectiles node if it exists, otherwise to battle scene
 		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
 		if battle_scene:
-			battle_scene.add_child(projectile)
+			# Check if Projectiles node exists
+			var projectiles_node = battle_scene.get_node_or_null("Projectiles")
+			if projectiles_node:
+				projectiles_node.add_child(projectile)
+			else:
+				battle_scene.add_child(projectile)
 		else:
 			get_tree().root.add_child(projectile)
+		
+		# Debug: Verify projectile was created
+		print("Projectile spawned at ", projectile.position, " with color ", _get_projectile_color())
 
 func _get_projectile_color() -> Color:
 	"""Get projectile color based on hero type"""
