@@ -347,14 +347,14 @@ func take_damage(amount: float):
 			# Node not ready, can't apply damage
 			return
 		
-		# Call RPC on this hero - it will execute on all peers, but only process on authority
-		var authority_peer = get_multiplayer_authority()
-		if authority_peer != 0:
-			# Call RPC specifically on the authority peer for better reliability
-			apply_damage_rpc.rpc_id(authority_peer, amount)
-		else:
-			# Fallback: call on all peers (will filter in apply_damage_rpc)
-			apply_damage_rpc.rpc(amount)
+		# Ensure parent is also in tree (required for path resolution)
+		if get_parent() == null or not get_parent().is_inside_tree():
+			# Parent not ready, can't resolve path for RPC
+			return
+		
+		# Use rpc() instead of rpc_id() - the RPC function already filters by authority
+		# This avoids path resolution issues when calling rpc_id() on a node that might not exist on the target peer
+		apply_damage_rpc.rpc(amount)
 		return
 	
 	# Single player - apply damage directly
@@ -375,13 +375,17 @@ func _apply_damage_internal(amount: float):
 	
 	# Sync health to all clients
 	if multiplayer.multiplayer_peer != null:
-		sync_health_rpc.rpc(current_health, max_health)
+		# Ensure node is in tree and has valid path before calling RPC
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			sync_health_rpc.rpc(current_health, max_health)
 	
 	# Update local health bar
 	health_changed.emit(current_health, max_health)
 	
 	# Spawn damage number
-	spawn_damage_number.rpc(amount)
+	# Ensure node is in tree and has valid path before calling RPC
+	if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+		spawn_damage_number.rpc(amount)
 	
 	# Check for death
 	if current_health <= 0.0 and not is_dead:
@@ -419,7 +423,9 @@ func die():
 	
 	# Sync death state to all clients
 	if multiplayer.multiplayer_peer != null:
-		sync_death_state_rpc.rpc(is_dead)
+		# Ensure node is in tree and has valid path before calling RPC
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			sync_death_state_rpc.rpc(is_dead)
 	
 	hero_died.emit()
 	print("Hero ", hero_type, " died!")
@@ -477,7 +483,12 @@ func attack_toward_mouse():
 	
 	# Network sync attack - only call RPC if we have authority and multiplayer is active
 	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
-		perform_attack.rpc(attack_dir)
+		# Ensure node is in tree and has valid path before calling RPC
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			perform_attack.rpc(attack_dir)
+		else:
+			# Node not ready, process locally only
+			perform_attack(attack_dir)
 	else:
 		# Single player or not authority - process locally
 		perform_attack(attack_dir)
@@ -594,8 +605,13 @@ func _ranged_attack(direction: Vector2):
 	"""Ranged attack - spawn projectile"""
 	# Network sync: spawn projectile on server so all clients see it
 	if multiplayer.multiplayer_peer != null:
-		# Call RPC to spawn projectile on server (which will sync to all clients)
-		spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color())
+		# Ensure node is in tree and has valid path before calling RPC
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			# Call RPC to spawn projectile on server (which will sync to all clients)
+			spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color())
+		else:
+			# Node not ready, spawn locally only
+			_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
 	else:
 		# Single player - spawn locally
 		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
@@ -669,7 +685,9 @@ func use_ability_q():
 	
 	# Network sync - only call RPC if we have authority and multiplayer is active
 	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
-		use_ability.rpc("q")
+		# Ensure node is in tree and has valid path before calling RPC
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			use_ability.rpc("q")
 	else:
 		# Single player or not authority - already executed locally
 		pass
@@ -692,7 +710,9 @@ func use_ability_e():
 	
 	# Network sync - only call RPC if we have authority and multiplayer is active
 	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
-		use_ability.rpc("e")
+		# Ensure node is in tree and has valid path before calling RPC
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			use_ability.rpc("e")
 	else:
 		# Single player or not authority - already executed locally
 		pass

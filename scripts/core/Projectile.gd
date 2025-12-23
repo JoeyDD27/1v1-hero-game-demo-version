@@ -129,7 +129,8 @@ func _physics_process(delta):
 	if multiplayer.multiplayer_peer != null:
 		network_update_timer += delta
 		if network_update_timer >= network_update_rate:
-			if is_inside_tree() and name != "":
+			# Ensure node is in tree and has valid path before calling RPC
+			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
 				sync_projectile_position.rpc(position)
 			network_update_timer = 0.0
 	
@@ -204,7 +205,9 @@ func _check_collisions():
 						body.take_damage(damage)
 						# Sync destruction to all clients
 						if multiplayer.multiplayer_peer != null:
-							destroy_projectile.rpc()
+							# Ensure node is in tree and has valid path before calling RPC
+							if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+								destroy_projectile.rpc()
 						queue_free()
 						return
 
