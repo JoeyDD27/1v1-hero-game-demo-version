@@ -503,6 +503,21 @@ func _melee_attack(direction: Vector2):
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
+			# Check if it's an enemy hero (different player_id)
+			var body_player_id = body.get("player_id")
+			if body_player_id == null or body_player_id == player_id:
+				continue
+			
+			# Check if hero is dead
+			var body_is_dead = body.get("is_dead")
+			if body_is_dead != null and body_is_dead:
+				continue
+			
+			# Check if hero is invincible
+			var body_is_invincible = body.get("is_invincible")
+			if body_is_invincible != null and body_is_invincible:
+				continue
+			
 			# Check if enemy is in attack direction (cone check)
 			var to_enemy = (body.global_position - position).normalized()
 			var dot = direction.dot(to_enemy)
@@ -632,6 +647,21 @@ func ability_shield_bash():
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
+			# Check if it's an enemy hero (different player_id)
+			var body_player_id = body.get("player_id")
+			if body_player_id == null or body_player_id == player_id:
+				continue
+			
+			# Check if hero is dead
+			var body_is_dead = body.get("is_dead")
+			if body_is_dead != null and body_is_dead:
+				continue
+			
+			# Check if hero is invincible
+			var body_is_invincible = body.get("is_invincible")
+			if body_is_invincible != null and body_is_invincible:
+				continue
+			
 			var distance = position.distance_to(body.global_position)
 			if distance <= bash_radius:
 				body.take_damage(bash_damage)
@@ -707,6 +737,21 @@ func ability_fireball():
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
+			# Check if it's an enemy hero (different player_id)
+			var body_player_id = body.get("player_id")
+			if body_player_id == null or body_player_id == player_id:
+				continue
+			
+			# Check if hero is dead
+			var body_is_dead = body.get("is_dead")
+			if body_is_dead != null and body_is_dead:
+				continue
+			
+			# Check if hero is invincible
+			var body_is_invincible = body.get("is_invincible")
+			if body_is_invincible != null and body_is_invincible:
+				continue
+			
 			var distance = mouse_pos.distance_to(body.global_position)
 			if distance <= fireball_radius:
 				body.take_damage(fireball_damage)

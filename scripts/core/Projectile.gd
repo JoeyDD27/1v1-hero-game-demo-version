@@ -73,8 +73,15 @@ func _check_collisions():
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
 			# Make sure it's an enemy hero
-			if body.has("player_id") and body.player_id != owner_peer_id:
-				if not body.has("is_invincible") or not body.is_invincible:
-					body.take_damage(damage)
-					queue_free()
-					return
+			# Check if body has player_id property (using get() instead of has())
+			var body_player_id = body.get("player_id")
+			if body_player_id != null and body_player_id != owner_peer_id:
+				# Check if hero is dead before checking invincibility
+				var is_dead = body.get("is_dead")
+				if is_dead == null or not is_dead:
+					# Check invincibility
+					var is_invincible = body.get("is_invincible")
+					if is_invincible == null or not is_invincible:
+						body.take_damage(damage)
+						queue_free()
+						return
