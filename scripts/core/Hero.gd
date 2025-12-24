@@ -501,13 +501,14 @@ func attack_toward_mouse():
 	# Always execute attack locally first (for immediate response)
 	# Then sync to other players via RPC if multiplayer is active
 	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
-		# Execute locally immediately (don't rely on RPC call_local)
+		# Execute locally immediately (shows visual and processes damage)
 		perform_attack_local(attack_dir)
 		
-		# Then try to sync to other players via RPC
-		# If RPC fails, at least the local player can still shoot
+		# Then sync visual effects to other players via RPC
+		# Use rpc_id to send to all OTHER peers (not ourselves)
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			perform_attack.rpc(attack_dir)
+			for peer_id in multiplayer.get_peers():
+				perform_attack.rpc_id(peer_id, attack_dir)
 		else:
 			# Node not ready for RPC, but we already executed locally
 			print("Warning: Node not ready for RPC, attack executed locally only")
@@ -531,26 +532,33 @@ func perform_attack_local(direction: Vector2):
 
 @rpc("any_peer", "reliable")
 func perform_attack(direction: Vector2):
-	"""Perform attack via RPC - syncs to all clients (doesn't execute locally, we call perform_attack_local directly)"""
+	"""Perform attack via RPC - shows visual effects on non-authority clients"""
 	# Safety check: ensure multiplayer is active
 	if multiplayer.multiplayer_peer == null:
 		return
 	
-	# Only process on authority in multiplayer (other clients just receive the sync)
-	# Non-authority clients should not process attacks (they see projectiles via spawn_projectile_rpc)
-	if not is_multiplayer_authority():
-		return
+	# This RPC is only called on OTHER clients (not the authority)
+	# The authority already executed the attack locally
+	# So we only need to show visual effects here
 	
-	# Execute the attack (authority processes it)
-	# Note: This is called from OTHER peers, not the local peer
-	# The local peer already executed perform_attack_local() directly
-	perform_attack_local(direction)
+	# Show visual effects on non-authority clients
+	# This ensures everyone sees melee attack animations
+	if hero_type == "Fighter":
+		# Show melee indicator on non-authority clients
+		_show_melee_indicator(direction)
+	
+	# Don't process damage/logic here - that's already done on authority
 
 func _melee_attack(direction: Vector2):
 	"""Melee attack - cone/line attack in direction"""
-	# Show melee attack indicator
+	# Show melee attack indicator (visual effect)
 	_show_melee_indicator(direction)
 	
+	# Process damage (authority only)
+	_process_melee_damage(direction)
+
+func _process_melee_damage(direction: Vector2):
+	"""Process melee attack damage - only called on authority"""
 	# Find enemies in attack range and direction
 	var space_state = get_world_2d().direct_space_state
 	var query = PhysicsShapeQueryParameters2D.new()
@@ -850,24 +858,33 @@ func use_ability_q():
 	if is_dead or ability_q_cooldown > 0.0:
 		return
 	
-	# Execute ability locally first
+	ability_q_cooldown = ability_q_max_cooldown
+	
+	# Get mouse position for abilities that need it (like Fireball)
+	var mouse_pos = get_global_mouse_position() if hero_type == "Mage" else Vector2.ZERO
+	
+	# Execute ability locally first (shows visuals and processes damage)
 	match hero_type:
 		"Fighter":
 			ability_dash()
 		"Shooter":
-			ability_rapid_fire()
+			ability_rapid_fire()  # This shows visual and applies effect
 		"Mage":
-			ability_fireball()
+			# Show visual indicator locally
+			var fireball_radius = 100.0
+			_show_area_indicator(mouse_pos, fireball_radius, Color(1, 0, 0, 0.5))
+			# Process damage
+			ability_fireball_at_position(mouse_pos)
 	
-	ability_q_cooldown = ability_q_max_cooldown
-	
-	# Network sync - only call RPC if we have authority and multiplayer is active
+	# Network sync - send RPC to other clients (without call_local to avoid duplicate execution)
 	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
 		# Ensure node is in tree and has valid path before calling RPC
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			use_ability.rpc("q")
+			# Use rpc_id to send to all OTHER peers (not ourselves)
+			for peer_id in multiplayer.get_peers():
+				use_ability.rpc_id(peer_id, "q", mouse_pos)
 	else:
-		# Single player or not authority - already executed locally
+		# Single player - no network sync needed
 		pass
 
 func use_ability_e():
@@ -875,35 +892,89 @@ func use_ability_e():
 	if is_dead or ability_e_cooldown > 0.0:
 		return
 	
-	# Execute ability locally first
+	ability_e_cooldown = ability_e_max_cooldown
+	
+	# Get mouse position for abilities that need it
+	var mouse_pos = get_global_mouse_position() if hero_type == "Mage" else Vector2.ZERO
+	
+	# Execute ability locally first (shows visuals and processes damage)
 	match hero_type:
 		"Fighter":
+			# Show visual indicator locally
+			var bash_radius = 150.0
+			_show_area_indicator(position, bash_radius, Color(1, 0.5, 0, 0.5))
+			# Process damage
 			ability_shield_bash()
 		"Shooter":
 			ability_pushback()
 		"Mage":
 			ability_teleport()
 	
-	ability_e_cooldown = ability_e_max_cooldown
-	
-	# Network sync - only call RPC if we have authority and multiplayer is active
+	# Network sync - send RPC to other clients (without call_local to avoid duplicate execution)
 	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
 		# Ensure node is in tree and has valid path before calling RPC
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			use_ability.rpc("e")
+			# Use rpc_id to send to all OTHER peers (not ourselves)
+			for peer_id in multiplayer.get_peers():
+				use_ability.rpc_id(peer_id, "e", mouse_pos)
 	else:
-		# Single player or not authority - already executed locally
+		# Single player - no network sync needed
 		pass
 
-@rpc("any_peer", "call_local", "reliable")
-func use_ability(ability: String):
-	"""Network sync for ability usage"""
+@rpc("any_peer", "reliable")
+func use_ability(ability: String, mouse_pos: Vector2 = Vector2.ZERO):
+	"""Network sync for ability usage - shows visual effects on non-authority clients"""
 	# Safety check: ensure multiplayer is active
 	if multiplayer.multiplayer_peer == null:
 		return
-	# Only process on authority - abilities that deal damage need to be processed on authority
-	if not is_multiplayer_authority():
-		return  # Visual effects only on non-authority
+	
+	# This RPC is only called on OTHER clients (not the authority)
+	# The authority already executed the ability locally
+	# So we only need to show visual effects here
+	var is_authority = is_multiplayer_authority()
+	
+	# If we somehow receive this as authority, skip (shouldn't happen with rpc_id)
+	if is_authority:
+		return
+	
+	match ability:
+		"q":
+			match hero_type:
+				"Fighter":
+					# Dash - show visual on all clients (movement is synced via position)
+					pass  # Dash doesn't have a visual indicator, just movement
+				"Shooter":
+					# Rapid Fire - visual effect is on hero itself (color change)
+					# This is handled in ability_rapid_fire() which runs on all clients
+					pass
+				"Mage":
+					# Fireball - show area indicator on all clients at the target position
+					if mouse_pos != Vector2.ZERO:
+						var fireball_radius = 100.0
+						_show_area_indicator(mouse_pos, fireball_radius, Color(1, 0, 0, 0.5))
+		"e":
+			match hero_type:
+				"Fighter":
+					# Shield Bash - show area indicator on all clients
+					var bash_radius = 150.0
+					_show_area_indicator(position, bash_radius, Color(1, 0.5, 0, 0.5))
+				"Shooter":
+					# Pushback - no visual indicator
+					pass
+				"Mage":
+					# Teleport - visual effect is movement (synced via position)
+					pass
+	
+	# Execute visual-only effects on non-authority clients
+	# (Damage/effects are already processed on authority)
+	match ability:
+		"q":
+			match hero_type:
+				"Shooter":
+					# Rapid Fire - show visual on all clients (color change)
+					ability_rapid_fire_visual()
+		"e":
+			pass  # No additional visual effects needed
 
 # Fighter Abilities
 func ability_dash():
@@ -924,8 +995,8 @@ func ability_shield_bash():
 	var bash_radius = 150.0
 	var bash_damage = attack_damage * 1.5
 	
-	# Show area indicator
-	_show_area_indicator(position, bash_radius, Color(1, 0.5, 0, 0.5))  # Orange
+	# Note: Visual indicator is shown in use_ability() RPC on all clients
+	# This function only processes damage (authority only)
 	
 	var space_state = get_world_2d().direct_space_state
 	var query = PhysicsShapeQueryParameters2D.new()
@@ -963,12 +1034,16 @@ var rapid_fire_active: bool = false
 var rapid_fire_timer: float = 0.0
 
 func ability_rapid_fire():
-	"""Shooter Q: Temporary attack speed buff"""
+	"""Shooter Q: Temporary attack speed buff (authority only - applies effect)"""
 	rapid_fire_active = true
 	rapid_fire_timer = 5.0
 	attack_speed *= 2.0  # Double attack speed
 	
-	# Visual indicator (green outline)
+	# Visual indicator (green outline) - show on all clients
+	ability_rapid_fire_visual()
+
+func ability_rapid_fire_visual():
+	"""Shooter Q: Visual effect (green color) - shows on all clients"""
 	var visual = get_node_or_null("Visual")
 	if visual is Polygon2D:
 		visual.color = Color.GREEN
@@ -1014,11 +1089,45 @@ func ability_pushback():
 func ability_fireball():
 	"""Mage Q: Area damage at target location"""
 	var mouse_pos = get_global_mouse_position()
+	ability_fireball_at_position(mouse_pos)
+
+func ability_fireball_at_position(target_pos: Vector2):
+	"""Mage Q: Area damage at specific position (called from RPC)"""
 	var fireball_radius = 100.0
 	var fireball_damage = attack_damage * 2.0
 	
-	# Show area indicator at target location
-	_show_area_indicator(mouse_pos, fireball_radius, Color(1, 0, 0, 0.5))  # Red
+	# Note: Visual indicator is shown in use_ability() RPC on all clients
+	# This function processes damage (authority only)
+	var space_state = get_world_2d().direct_space_state
+	var query = PhysicsShapeQueryParameters2D.new()
+	var shape = CircleShape2D.new()
+	shape.radius = fireball_radius
+	query.shape = shape
+	query.transform.origin = target_pos
+	
+	var results = space_state.intersect_shape(query)
+	
+	for result in results:
+		var body = result.collider
+		if body.has_method("take_damage") and body != self:
+			# Check if it's an enemy hero (different player_id)
+			var body_player_id = body.get("player_id")
+			if body_player_id == null or body_player_id == player_id:
+				continue
+			
+			# Check if hero is dead
+			var body_is_dead = body.get("is_dead")
+			if body_is_dead != null and body_is_dead:
+				continue
+			
+			# Check if hero is invincible
+			var body_is_invincible = body.get("is_invincible")
+			if body_is_invincible != null and body_is_invincible:
+				continue
+			
+			var distance = target_pos.distance_to(body.global_position)
+			if distance <= fireball_radius:
+				body.take_damage(fireball_damage)  # Red
 	
 	var space_state = get_world_2d().direct_space_state
 	var query = PhysicsShapeQueryParameters2D.new()
