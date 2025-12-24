@@ -1202,11 +1202,14 @@ func use_ability(ability: String):
 # Fighter Abilities
 func ability_dash():
 	"""Fighter Q: Dash to mouse position - ONLY called on server"""
+	ability_dash_with_mouse(get_global_mouse_position())
+
+func ability_dash_with_mouse(mouse_pos: Vector2):
+	"""Fighter Q: Dash to specified mouse position - ONLY called on server"""
 	# Only server processes movement
 	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
 		return
 	
-	var mouse_pos = get_global_mouse_position()
 	var dash_distance = 300.0
 	var dash_dir = (mouse_pos - position).normalized()
 	var dash_target = position + dash_dir * dash_distance
