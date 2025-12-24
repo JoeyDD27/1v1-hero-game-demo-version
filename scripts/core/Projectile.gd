@@ -372,21 +372,21 @@ func _check_collisions():
 		if not body.has_method("take_damage"):
 			continue
 		
-			# Make sure it's an enemy hero (different player_id)
-			var body_player_id = body.get("player_id")
-			if body_player_id == null:
-				continue
-			
-			# Must be different player
-			if body_player_id == owner_peer_id:
-				continue
-			
-			# Check if this is the specific hero that fired the projectile
-			# Compare by name or path to avoid hitting the sender
-			if owner_hero_name != "":
-				var body_name = body.name if body.name != "" else str(body.get_path())
-				if body_name == owner_hero_name:
-					continue  # Don't hit the hero that fired this projectile
+		# Make sure it's an enemy hero (different player_id)
+		var body_player_id = body.get("player_id")
+		if body_player_id == null:
+			continue
+		
+		# Must be different player
+		if body_player_id == owner_peer_id:
+			continue
+		
+		# Check if this is the specific hero that fired the projectile
+		# Compare by name or path to avoid hitting the sender
+		if owner_hero_name != "":
+			var body_name = body.name if body.name != "" else str(body.get_path())
+			if body_name == owner_hero_name:
+				continue  # Don't hit the hero that fired this projectile
 		
 		# Check if hero is dead
 		var is_dead = body.get("is_dead")
