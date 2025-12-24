@@ -778,8 +778,11 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		
 		# Now setup the projectile (position is already set)
 		# Pass the hero's name so projectile can avoid colliding with its sender
-		var hero_name = name if name != "" else str(get_path())
-		projectile.setup(dir, dmg, owner_id, proj_color, hero_name)
+		# Use provided hero_name parameter, or get it from this hero if not provided
+		var final_hero_name = hero_name
+		if final_hero_name == "":
+			final_hero_name = name if name != "" else str(get_path())
+		projectile.setup(dir, dmg, owner_id, proj_color, final_hero_name)
 		projectile.visible = true
 		
 		# Connect to projectile's tree_exited to clean up tracking when freed
