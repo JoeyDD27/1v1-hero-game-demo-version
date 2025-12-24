@@ -49,7 +49,15 @@ func _ready():
 		var shape = CircleShape2D.new()
 		shape.radius = 20.0
 		collision.shape = shape
+		collision.collision_layer = 1  # Set collision layer
+		collision.collision_mask = 1   # Set collision mask
 		add_child(collision)
+	else:
+		# Ensure existing collision shape has proper layers
+		var collision = get_node("CollisionShape2D")
+		if collision:
+			collision.collision_layer = 1
+			collision.collision_mask = 1
 	
 	# Set up visual representation (colored circle)
 	if not has_node("Visual"):
@@ -702,14 +710,15 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		
 		# Set multiplayer authority BEFORE adding to scene tree
 		# CRITICAL: Only server should have authority over projectiles
-		# This ensures only server controls movement, clients just interpolate
+		# This ensures only server controls movement and collision, clients just interpolate
 		if multiplayer.multiplayer_peer != null:
-			if multiplayer.is_server():
-				projectile.set_multiplayer_authority(1)  # Server has authority
-			else:
-				# Client: set authority to server, but this client won't control it
-				# The server will control movement and sync position via RPC
-				projectile.set_multiplayer_authority(1)  # Server has authority (even though we're client)
+			# ALL projectiles must have server authority (1) for proper collision detection
+			# This ensures the server processes collisions for ALL projectiles, regardless of who fired them
+			projectile.set_multiplayer_authority(1)  # Server has authority
+			
+			# Verify authority was set correctly
+			if not projectile.is_multiplayer_authority():
+				print("ERROR: Projectile authority not set correctly! Expected server (1), got: ", projectile.get_multiplayer_authority())
 		
 		# Add to scene tree FIRST (so _ready() is called with correct position)
 		var battle_scene = get_tree().get_first_node_in_group("battle_manager")

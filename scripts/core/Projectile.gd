@@ -30,11 +30,25 @@ func _ready():
 		var shape = CircleShape2D.new()
 		shape.radius = PROJECTILE_RADIUS
 		collision.shape = shape
+		collision.collision_layer = 1  # Make sure collision layer is set
+		collision.collision_mask = 1   # Make sure collision mask is set
 		add_child(collision)
 	
 	# Set up visual - make it more visible
 	if not has_node("Visual"):
 		_create_visual()
+	
+	# Verify authority is set correctly
+	if multiplayer.multiplayer_peer != null:
+		var authority = get_multiplayer_authority()
+		var is_server = multiplayer.is_server()
+		var has_auth = is_multiplayer_authority()
+		print("Projectile _ready - Owner: ", owner_peer_id, " Authority: ", authority, " IsServer: ", is_server, " HasAuth: ", has_auth, " Position: ", position)
+		
+		# If we're the server but don't have authority, that's a problem
+		if is_server and not has_auth:
+			print("ERROR: Server spawned projectile but doesn't have authority! Fixing...")
+			set_multiplayer_authority(1)
 	
 	# If we're a client, ensure we start at the correct position
 	# The position should already be set before _ready() is called
@@ -121,7 +135,10 @@ func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Co
 func _physics_process(delta):
 	# Network sync handling
 	if multiplayer.multiplayer_peer != null:
-		if not is_multiplayer_authority():
+		# Check if we have authority (server should have authority for all projectiles)
+		var has_authority = is_multiplayer_authority()
+		
+		if not has_authority:
 			# Client: interpolate network position
 			# Only interpolate if network_position is valid (not zero or very close to zero)
 			if network_position.distance_to(Vector2.ZERO) > 1.0 or position.distance_to(Vector2.ZERO) < 1.0:
@@ -144,8 +161,22 @@ func _physics_process(delta):
 			# Still animate visuals
 			_animate_projectile(delta)
 			return
+		
+		# We have authority (server) - process movement and collision
+		# CRITICAL: Server must process ALL projectiles, regardless of who spawned them
+		_process_authority_physics(delta)
+	else:
+		# Single player - process normally
+		_process_authority_physics(delta)
+
+func _process_authority_physics(delta):
+	"""Process physics for authority (server or single player)"""
+	# Verify we actually have authority
+	if multiplayer.multiplayer_peer != null:
+		if not is_multiplayer_authority():
+			print("ERROR: _process_authority_physics called but we don't have authority! Owner: ", owner_peer_id)
+			return
 	
-	# Authority (server or single player): process movement and collision
 	# Animate projectile (rotation and pulsing)
 	_animate_projectile(delta)
 	
@@ -160,8 +191,10 @@ func _physics_process(delta):
 	else:
 		# No direction set - this shouldn't happen, but handle it gracefully
 		print("Warning: Projectile has no direction, cannot move. Owner: ", owner_peer_id)
+		return
 	
-	# Check collision with enemies (only on authority)
+	# Check collision with enemies (only on authority/server)
+	# CRITICAL: This must run on server for ALL projectiles, including guest projectiles
 	_check_collisions()
 	
 	# Sync position to clients
@@ -252,36 +285,118 @@ func _check_collisions():
 	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
 		return
 	
+	# Ensure we have a valid direction and position
+	if direction.length() == 0:
+		return
+	
+	# Method 1: Direct hero checking (more reliable than physics queries)
+	var battle_manager = get_tree().get_first_node_in_group("battle_manager")
+	if battle_manager:
+		var heroes_node = battle_manager.get_node_or_null("Heroes")
+		if heroes_node:
+			for hero in heroes_node.get_children():
+				if not is_instance_valid(hero):
+					continue
+				
+				# Check if it's a hero that can take damage
+				if not hero.has_method("take_damage"):
+					continue
+				
+				# Make sure it's an enemy hero (different player_id)
+				var hero_player_id = hero.get("player_id")
+				if hero_player_id == null:
+					continue
+				
+				# Must be different player
+				if hero_player_id == owner_peer_id:
+					continue
+				
+				# Check if hero is dead
+				var is_dead = hero.get("is_dead")
+				if is_dead != null and is_dead:
+					continue
+				
+				# Check invincibility
+				var is_invincible = hero.get("is_invincible")
+				if is_invincible != null and is_invincible:
+					continue
+				
+				# Check distance to ensure we're actually colliding
+				var distance = position.distance_to(hero.global_position)
+				var collision_radius = PROJECTILE_RADIUS + 30.0  # Projectile radius + hero radius
+				if distance <= collision_radius:
+					# Hit! Apply damage
+					print("Projectile hit! Owner: ", owner_peer_id, " Target: ", hero_player_id, " Damage: ", damage, " Distance: ", distance)
+					hero.take_damage(damage)
+					
+					# Sync destruction to all clients
+					if multiplayer.multiplayer_peer != null:
+						# Ensure node is in tree and has valid path before calling RPC
+						if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+							destroy_projectile.rpc()
+					
+					queue_free()
+					return
+	
+	# Method 2: Fallback to physics query (in case direct checking fails)
 	var space_state = get_world_2d().direct_space_state
+	if space_state == null:
+		return
+	
 	var query = PhysicsShapeQueryParameters2D.new()
 	var shape = CircleShape2D.new()
-	shape.radius = PROJECTILE_RADIUS * 2
+	shape.radius = PROJECTILE_RADIUS + 30.0  # Projectile radius + hero radius
 	query.shape = shape
 	query.transform.origin = position
+	query.collision_mask = 1  # Make sure we're checking the right collision layer
 	
 	var results = space_state.intersect_shape(query)
 	
 	for result in results:
 		var body = result.collider
-		if body.has_method("take_damage") and body != self:
-			# Make sure it's an enemy hero
-			# Check if body has player_id property (using get() instead of has())
-			var body_player_id = body.get("player_id")
-			if body_player_id != null and body_player_id != owner_peer_id:
-				# Check if hero is dead before checking invincibility
-				var is_dead = body.get("is_dead")
-				if is_dead == null or not is_dead:
-					# Check invincibility
-					var is_invincible = body.get("is_invincible")
-					if is_invincible == null or not is_invincible:
-						body.take_damage(damage)
-						# Sync destruction to all clients
-						if multiplayer.multiplayer_peer != null:
-							# Ensure node is in tree and has valid path before calling RPC
-							if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-								destroy_projectile.rpc()
-						queue_free()
-						return
+		if body == null or body == self:
+			continue
+		
+		# Check if it's a hero that can take damage
+		if not body.has_method("take_damage"):
+			continue
+		
+		# Make sure it's an enemy hero (different player_id)
+		var body_player_id = body.get("player_id")
+		if body_player_id == null:
+			continue
+		
+		# Must be different player
+		if body_player_id == owner_peer_id:
+			continue
+		
+		# Check if hero is dead
+		var is_dead = body.get("is_dead")
+		if is_dead != null and is_dead:
+			continue
+		
+		# Check invincibility
+		var is_invincible = body.get("is_invincible")
+		if is_invincible != null and is_invincible:
+			continue
+		
+		# Check distance to ensure we're actually colliding
+		var distance = position.distance_to(body.global_position)
+		if distance > PROJECTILE_RADIUS + 30.0:  # Projectile radius + hero radius
+			continue
+		
+		# Hit! Apply damage
+		print("Projectile hit (physics query)! Owner: ", owner_peer_id, " Target: ", body_player_id, " Damage: ", damage)
+		body.take_damage(damage)
+		
+		# Sync destruction to all clients
+		if multiplayer.multiplayer_peer != null:
+			# Ensure node is in tree and has valid path before calling RPC
+			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+				destroy_projectile.rpc()
+		
+		queue_free()
+		return
 
 @rpc("authority", "call_local", "reliable")
 func destroy_projectile():
