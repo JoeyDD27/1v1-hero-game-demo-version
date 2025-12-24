@@ -204,6 +204,12 @@ func _process_local_movement(delta):
 	ability_q_cooldown = max(0.0, ability_q_cooldown - delta)
 	ability_e_cooldown = max(0.0, ability_e_cooldown - delta)
 	
+	# Periodic cleanup of invalid projectiles from tracking (every 2 seconds)
+	projectile_cleanup_timer += delta
+	if projectile_cleanup_timer >= 2.0:
+		_cleanup_invalid_projectiles()
+		projectile_cleanup_timer = 0.0
+	
 	# Update rapid fire buff
 	if rapid_fire_active:
 		rapid_fire_timer -= delta
@@ -624,6 +630,7 @@ func _ranged_attack(direction: Vector2):
 
 # Track spawned projectiles to prevent duplicates
 var spawned_projectiles: Dictionary = {}  # owner_id + timestamp -> projectile
+var projectile_cleanup_timer: float = 0.0  # Timer for periodic cleanup
 
 func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_key: String = ""):
 	"""Spawn projectile locally (called on all clients via RPC)"""
@@ -633,8 +640,14 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		spawn_key = str(owner_id) + "_" + str(spawn_time)
 	
 	# Check if we already spawned this projectile (prevent duplicates from RPC call_local)
+	# If spawn_key exists but value is null, it means we're already spawning (race condition prevention)
 	if spawned_projectiles.has(spawn_key):
-		print("Duplicate projectile spawn prevented: ", spawn_key)
+		var existing = spawned_projectiles[spawn_key]
+		if existing != null:
+			print("Duplicate projectile spawn prevented: ", spawn_key)
+			return
+		# If null, we're in the middle of spawning, also prevent duplicate
+		print("Projectile already being spawned (race condition prevented): ", spawn_key)
 		return
 	
 	var projectile_scene = preload("res://scenes/Projectile.tscn")
@@ -648,6 +661,7 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 	
 	if projectile:
 		# Mark as spawned immediately to prevent duplicates
+		# Replace the placeholder null with the actual projectile
 		spawned_projectiles[spawn_key] = projectile
 		
 		# Clean up old entries (keep only last 20)
@@ -678,31 +692,62 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		# Wait a frame to ensure node is in tree
 		await get_tree().process_frame
 		
+		# Verify projectile is still valid (not freed during async wait)
+		if not is_instance_valid(projectile):
+			# Projectile was freed, clean up tracking
+			if spawned_projectiles.has(spawn_key):
+				spawned_projectiles.erase(spawn_key)
+			return
+		
 		# Now setup the projectile (position is already set)
 		projectile.setup(dir, dmg, owner_id, proj_color)
 		projectile.visible = true
 		
-		# Connect to projectile's tree_exited to clean up tracking
-		# Note: tree_exited signal doesn't exist, we'll clean up when projectile is freed
-		# The spawned_projectiles dictionary will be cleaned up when projectile is removed
+		# Connect to projectile's tree_exited to clean up tracking when freed
+		# Use a weak reference approach - check periodically instead of relying on signals
+		# (Signals might not fire reliably when nodes are freed)
 		
 		# Immediately sync initial position to clients if we're the server
 		if multiplayer.multiplayer_peer != null and multiplayer.is_server():
 			# Wait another frame to ensure projectile is fully initialized
 			await get_tree().process_frame
-			if projectile.is_inside_tree() and projectile.name != "":
+			if is_instance_valid(projectile) and projectile.is_inside_tree() and projectile.name != "":
 				projectile.sync_projectile_position.rpc(projectile.position)
 		
 		# Debug: Verify projectile was created
 		print("Projectile spawned: ", spawn_key, " at ", projectile.position, " with color ", proj_color)
+	else:
+		# Failed to create projectile, clean up placeholder
+		if spawned_projectiles.has(spawn_key):
+			spawned_projectiles.erase(spawn_key)
+
+
+func _cleanup_invalid_projectiles():
+	"""Clean up invalid projectiles from tracking dictionary"""
+	var keys_to_remove = []
+	
+	for key in spawned_projectiles.keys():
+		var projectile = spawned_projectiles[key]
+		# Remove if projectile is null (placeholder) or invalid (freed)
+		if projectile == null or not is_instance_valid(projectile):
+			keys_to_remove.append(key)
+	
+	for key in keys_to_remove:
+		spawned_projectiles.erase(key)
 
 func _cleanup_projectile_tracking(owner_id: int):
 	"""Clean up old projectile tracking entries for a specific owner"""
-	# Remove entries older than 5 seconds
+	# Remove entries older than 5 seconds or invalid projectiles
 	var current_time = Time.get_ticks_msec()
 	var keys_to_remove = []
 	
 	for key in spawned_projectiles.keys():
+		var projectile = spawned_projectiles[key]
+		# Remove if projectile is invalid (freed)
+		if projectile != null and not is_instance_valid(projectile):
+			keys_to_remove.append(key)
+			continue
+		
 		# Extract timestamp from key (format: "owner_id_timestamp")
 		var parts = key.split("_")
 		if parts.size() >= 2:
@@ -720,9 +765,14 @@ func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, ow
 	var projectile_key = str(owner_id) + "_" + str(spawn_id)
 	
 	# Check if we already spawned this projectile (prevent duplicates)
+	# CRITICAL: Check BEFORE any async operations to prevent race conditions
 	if spawned_projectiles.has(projectile_key):
 		print("Duplicate projectile spawn prevented via RPC: ", projectile_key)
 		return
+	
+	# Mark as spawning IMMEDIATELY to prevent race conditions from multiple RPC calls
+	# Use a placeholder marker to prevent duplicates during async operations
+	spawned_projectiles[projectile_key] = null  # Placeholder - will be replaced with actual projectile
 	
 	# Spawn projectile on all clients
 	# This is called from the authority (the player who fired)

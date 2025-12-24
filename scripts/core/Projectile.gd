@@ -36,9 +36,14 @@ func _ready():
 	if not has_node("Visual"):
 		_create_visual()
 	
-	# If we're a client, wait for initial position sync
+	# If we're a client, ensure we start at the correct position
+	# The position should already be set before _ready() is called
 	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
-		# Wait a frame for initial position sync
+		# Use the current position as initial network position
+		# This prevents the projectile from appearing at (0,0) or staying at spawn
+		if position.distance_to(Vector2.ZERO) > 1.0:
+			network_position = position
+		# Wait a frame for any initial position sync from server
 		await get_tree().process_frame
 
 func _create_visual():
