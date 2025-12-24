@@ -529,10 +529,13 @@ func attack_toward_mouse():
 	var mouse_pos = get_global_mouse_position()
 	var attack_dir = (mouse_pos - position).normalized()
 	
-	# GUESTS: Only send RPC to server, don't process locally
+	# GUESTS: Show animation immediately (client-side prediction), then send to server
 	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
-		# Guest: Send attack request to server
-		# Use rpc() instead of rpc_id() - Godot will route to server automatically
+		# Show visual effects immediately for instant feedback
+		_show_attack_visuals(attack_dir)
+		# Set local cooldown for UI feedback (server will validate and sync back)
+		attack_cooldown = 1.0 / attack_speed
+		# Send request to server for damage processing
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
 			request_attack.rpc(attack_dir)  # Send to server
 		return
@@ -643,6 +646,15 @@ func _melee_attack(direction: Vector2):
 					else:
 						# Fallback to take_damage if _server_apply_damage doesn't exist
 						body.take_damage(attack_damage)
+
+func _show_attack_visuals(direction: Vector2):
+	"""Show attack visuals without processing damage (for client-side prediction)"""
+	match hero_type:
+		"Fighter":
+			_show_melee_indicator(direction)
+		"Shooter", "Mage":
+			# Spawn visual-only projectile (no damage, just visual)
+			_spawn_projectile_visual_only(direction)
 
 func _show_melee_indicator(direction: Vector2):
 	"""Show visual indicator for melee attack"""
@@ -811,6 +823,87 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 			spawned_projectiles.erase(spawn_key)
 
 
+func _spawn_projectile_visual_only(direction: Vector2):
+	"""Spawn projectile for visual only (no damage, no server sync) - for client-side prediction"""
+	# Generate unique key for visual-only projectile (prefixed with "visual_" to avoid conflicts)
+	var spawn_time = Time.get_ticks_msec()
+	var visual_key = "visual_" + str(player_id) + "_" + str(spawn_time)
+	
+	# Check if we already spawned this visual projectile
+	if visual_only_projectiles.has(visual_key):
+		var existing = visual_only_projectiles[visual_key]
+		if existing != null and is_instance_valid(existing):
+			return  # Already spawned
+	
+	# Mark as spawning
+	visual_only_projectiles[visual_key] = null
+	
+	var projectile_scene = preload("res://scenes/Projectile.tscn")
+	var projectile = null
+	
+	if projectile_scene:
+		projectile = projectile_scene.instantiate()
+	else:
+		projectile = preload("res://scripts/core/Projectile.gd").new()
+	
+	if projectile:
+		# Mark as spawned
+		visual_only_projectiles[visual_key] = projectile
+		
+		# Clean up old entries
+		if visual_only_projectiles.size() > 10:
+			var oldest_key = visual_only_projectiles.keys()[0]
+			visual_only_projectiles.erase(oldest_key)
+		
+		# Set position
+		projectile.position = position
+		
+		# Set as visual-only (no authority, no damage)
+		# Visual-only projectiles don't need authority - they're just for display
+		projectile.set_multiplayer_authority(0)  # No authority - visual only
+		
+		# Add to scene tree
+		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
+		if battle_scene:
+			var projectiles_node = battle_scene.get_node_or_null("Projectiles")
+			if projectiles_node:
+				projectiles_node.add_child(projectile, true)
+			else:
+				battle_scene.add_child(projectile, true)
+		else:
+			get_tree().root.add_child(projectile, true)
+		
+		# Wait a frame
+		await get_tree().process_frame
+		
+		# Verify still valid
+		if not is_instance_valid(projectile):
+			if visual_only_projectiles.has(visual_key):
+				visual_only_projectiles.erase(visual_key)
+			return
+		
+		# Setup projectile (visual only - damage is 0, owner is self for tracking)
+		projectile.setup(direction, 0.0, player_id, _get_projectile_color())  # 0 damage - visual only
+		projectile.visible = true
+		
+		# Visual-only projectiles move locally (no server sync needed)
+		# They will be replaced by server's real projectile when it arrives
+		
+		# Clean up when projectile is removed
+		if projectile.tree_exited.is_connected(_on_visual_projectile_removed.bind(visual_key)):
+			pass  # Already connected
+		else:
+			projectile.tree_exited.connect(_on_visual_projectile_removed.bind(visual_key))
+	else:
+		# Failed to create
+		if visual_only_projectiles.has(visual_key):
+			visual_only_projectiles.erase(visual_key)
+
+func _on_visual_projectile_removed(visual_key: String):
+	"""Callback when visual-only projectile is removed"""
+	if visual_only_projectiles.has(visual_key):
+		visual_only_projectiles.erase(visual_key)
+
 func _cleanup_invalid_projectiles():
 	"""Clean up invalid projectiles from tracking dictionary"""
 	var keys_to_remove = []
@@ -823,6 +916,16 @@ func _cleanup_invalid_projectiles():
 	
 	for key in keys_to_remove:
 		spawned_projectiles.erase(key)
+	
+	# Also clean up visual-only projectiles
+	keys_to_remove.clear()
+	for key in visual_only_projectiles.keys():
+		var projectile = visual_only_projectiles[key]
+		if projectile == null or not is_instance_valid(projectile):
+			keys_to_remove.append(key)
+	
+	for key in keys_to_remove:
+		visual_only_projectiles.erase(key)
 
 func _cleanup_projectile_tracking(owner_id: int):
 	"""Clean up old projectile tracking entries for a specific owner"""

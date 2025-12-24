@@ -119,6 +119,19 @@ func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Co
 		rotation = direction.angle() + PI / 2.0
 
 func _physics_process(delta):
+	# Visual-only projectiles (damage = 0) move locally regardless of authority
+	if damage <= 0.0:
+		# Visual-only projectile - move locally
+		_animate_projectile(delta)
+		if direction.length() > 0:
+			velocity = direction * speed
+			move_and_slide()
+			rotation = direction.angle() + PI / 2.0
+		# Check if traveled too far
+		if position.distance_to(start_position) > max_distance:
+			queue_free()
+		return
+	
 	# Network sync handling
 	if multiplayer.multiplayer_peer != null:
 		if not is_multiplayer_authority():

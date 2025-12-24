@@ -1140,4 +1140,3 @@ Based on feedback, decide:
 
 - Ask Cursor to explain GDScript syntax if needed
 - Use Cursor's codebase search to find related code
-- Ask Cursor to debug errors: "Why is this code not working?"
