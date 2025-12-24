@@ -1127,37 +1127,6 @@ func ability_fireball_at_position(target_pos: Vector2):
 			
 			var distance = target_pos.distance_to(body.global_position)
 			if distance <= fireball_radius:
-				body.take_damage(fireball_damage)  # Red
-	
-	var space_state = get_world_2d().direct_space_state
-	var query = PhysicsShapeQueryParameters2D.new()
-	var shape = CircleShape2D.new()
-	shape.radius = fireball_radius
-	query.shape = shape
-	query.transform.origin = mouse_pos
-	
-	var results = space_state.intersect_shape(query)
-	
-	for result in results:
-		var body = result.collider
-		if body.has_method("take_damage") and body != self:
-			# Check if it's an enemy hero (different player_id)
-			var body_player_id = body.get("player_id")
-			if body_player_id == null or body_player_id == player_id:
-				continue
-			
-			# Check if hero is dead
-			var body_is_dead = body.get("is_dead")
-			if body_is_dead != null and body_is_dead:
-				continue
-			
-			# Check if hero is invincible
-			var body_is_invincible = body.get("is_invincible")
-			if body_is_invincible != null and body_is_invincible:
-				continue
-			
-			var distance = mouse_pos.distance_to(body.global_position)
-			if distance <= fireball_radius:
 				body.take_damage(fireball_damage)
 
 func ability_teleport():
