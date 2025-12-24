@@ -487,33 +487,27 @@ func attack_toward_mouse():
 	# Set attack cooldown
 	attack_cooldown = 1.0 / attack_speed
 	
-	# Network sync attack - only call RPC if we have authority and multiplayer is active
+	# Always execute attack locally first (for immediate response)
+	# Then sync to other players via RPC if multiplayer is active
 	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
-		# Ensure node is in tree and has valid path before calling RPC
+		# Execute locally immediately (don't rely on RPC call_local)
+		perform_attack_local(attack_dir)
+		
+		# Then try to sync to other players via RPC
+		# If RPC fails, at least the local player can still shoot
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
 			perform_attack.rpc(attack_dir)
 		else:
-			# Node not ready, process locally only
-			perform_attack(attack_dir)
+			# Node not ready for RPC, but we already executed locally
+			print("Warning: Node not ready for RPC, attack executed locally only")
 	else:
 		# Single player or not authority - process locally
-		perform_attack(attack_dir)
+		perform_attack_local(attack_dir)
 
-@rpc("any_peer", "call_local", "reliable")
-func perform_attack(direction: Vector2):
-	"""Perform attack in given direction"""
-	# Safety check: ensure multiplayer is active
-	if multiplayer.multiplayer_peer == null:
-		# Single player mode - process directly
-		match hero_type:
-			"Fighter":
-				_melee_attack(direction)
-			"Shooter", "Mage":
-				_ranged_attack(direction)
-		return
-	
-	# Only process on authority in multiplayer
-	if not is_multiplayer_authority():
+func perform_attack_local(direction: Vector2):
+	"""Perform attack locally (called directly, not via RPC)"""
+	# Only process if we have authority (or single player)
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
 		return
 	
 	match hero_type:
@@ -521,6 +515,23 @@ func perform_attack(direction: Vector2):
 			_melee_attack(direction)
 		"Shooter", "Mage":
 			_ranged_attack(direction)
+
+@rpc("any_peer", "reliable")
+func perform_attack(direction: Vector2):
+	"""Perform attack via RPC - syncs to all clients (doesn't execute locally, we call perform_attack_local directly)"""
+	# Safety check: ensure multiplayer is active
+	if multiplayer.multiplayer_peer == null:
+		return
+	
+	# Only process on authority in multiplayer (other clients just receive the sync)
+	# Non-authority clients should not process attacks (they see projectiles via spawn_projectile_rpc)
+	if not is_multiplayer_authority():
+		return
+	
+	# Execute the attack (authority processes it)
+	# Note: This is called from OTHER peers, not the local peer
+	# The local peer already executed perform_attack_local() directly
+	perform_attack_local(direction)
 
 func _melee_attack(direction: Vector2):
 	"""Melee attack - cone/line attack in direction"""
@@ -614,15 +625,22 @@ func _ranged_attack(direction: Vector2):
 	if multiplayer.multiplayer_peer != null:
 		# Only spawn if we're the authority (the player who owns this hero)
 		if is_multiplayer_authority():
-			# Ensure node is in tree and has valid path before calling RPC
+			# Always spawn locally first (for immediate response, even if RPC fails)
+			# Use a unique spawn ID to prevent duplicates
+			var spawn_id = Time.get_ticks_msec()
+			var projectile_key = str(player_id) + "_" + str(spawn_id)
+			
+			# Spawn locally first
+			_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key)
+			
+			# Then try to sync to other clients via RPC
+			# If RPC fails, at least the local player can still shoot
 			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-				# Spawn locally and sync to all clients via RPC
-				# Use a unique spawn ID to prevent duplicates
-				var spawn_id = Time.get_ticks_msec()
+				# Sync to other clients (call_local will also execute locally, but duplicate prevention handles it)
 				spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color(), spawn_id)
 			else:
-				# Node not ready, spawn locally only
-				_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
+				# Node not ready for RPC, but we already spawned locally
+				print("Warning: Node not ready for projectile RPC, spawned locally only")
 		# If not authority, don't spawn - we'll see it from the authority's RPC
 	else:
 		# Single player - spawn locally
