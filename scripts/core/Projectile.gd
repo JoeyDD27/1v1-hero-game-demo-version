@@ -21,6 +21,8 @@ var network_update_timer: float = 0.0
 
 func _ready():
 	start_position = position
+	# Initialize network_position to current position to avoid teleporting from (0,0)
+	network_position = position
 	
 	# Set up collision
 	if not has_node("CollisionShape2D"):
@@ -33,6 +35,11 @@ func _ready():
 	# Set up visual - make it more visible
 	if not has_node("Visual"):
 		_create_visual()
+	
+	# If we're a client, wait for initial position sync
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
+		# Wait a frame for initial position sync
+		await get_tree().process_frame
 
 func _create_visual():
 	"""Create visual representation of projectile"""
@@ -76,6 +83,9 @@ func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Co
 	damage = dmg
 	owner_peer_id = owner_id
 	
+	# Initialize network_position to current position (set before this function)
+	network_position = position
+	
 	# Ensure visual is created if scene doesn't have it
 	if not has_node("Visual"):
 		_create_visual()
@@ -108,7 +118,18 @@ func _physics_process(delta):
 	if multiplayer.multiplayer_peer != null:
 		if not is_multiplayer_authority():
 			# Client: interpolate network position
-			position = position.lerp(network_position, 0.5)
+			# Only interpolate if network_position is valid (not zero or very close to zero)
+			if network_position.distance_to(Vector2.ZERO) > 1.0 or position.distance_to(Vector2.ZERO) < 1.0:
+				# Smooth interpolation
+				position = position.lerp(network_position, 0.5)
+			else:
+				# If we're at origin and network_position is also origin, snap to network_position
+				# This handles the initial spawn case
+				if network_position.distance_to(Vector2.ZERO) < 1.0:
+					# Wait for first position update
+					pass
+				else:
+					position = network_position
 			# Still animate visuals
 			_animate_projectile(delta)
 			return
@@ -146,7 +167,20 @@ func _physics_process(delta):
 func sync_projectile_position(pos: Vector2):
 	"""Sync projectile position to all clients"""
 	if not is_multiplayer_authority():
+		# Update network position
+		var old_network_pos = network_position
 		network_position = pos
+		
+		# If this is the first position update (network_position was at origin), snap immediately
+		# This prevents the teleport-from-origin bug
+		if old_network_pos.distance_to(Vector2.ZERO) < 1.0 and network_position.distance_to(Vector2.ZERO) > 1.0:
+			position = network_position
+		# If position is way off (more than 100 pixels), snap immediately (initial sync)
+		elif position.distance_to(network_position) > 100.0:
+			position = network_position
+		# If this is the first position update and we're at origin, snap immediately
+		if position.distance_to(Vector2.ZERO) < 1.0 and network_position.distance_to(Vector2.ZERO) > 1.0:
+			position = network_position
 
 func _animate_projectile(delta):
 	"""Animate projectile with pulsing and rotation"""

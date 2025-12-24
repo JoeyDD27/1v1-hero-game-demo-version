@@ -628,15 +628,15 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		projectile = preload("res://scripts/core/Projectile.gd").new()
 	
 	if projectile:
-		projectile.setup(dir, dmg, owner_id, proj_color)
+		# Set position BEFORE adding to scene tree and BEFORE setup
+		# This ensures position is set before _ready() is called
 		projectile.position = pos
-		projectile.visible = true
 		
-		# Set multiplayer authority to server (for collision detection)
+		# Set multiplayer authority BEFORE adding to scene tree
 		if multiplayer.multiplayer_peer != null:
 			projectile.set_multiplayer_authority(1)  # Server has authority
 		
-		# Add to scene tree - add to a Projectiles node if it exists, otherwise to battle scene
+		# Add to scene tree FIRST (so _ready() is called with correct position)
 		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
 		if battle_scene:
 			# Check if Projectiles node exists
@@ -648,6 +648,20 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		else:
 			get_tree().root.add_child(projectile, true)
 		
+		# Wait a frame to ensure node is in tree
+		await get_tree().process_frame
+		
+		# Now setup the projectile (position is already set)
+		projectile.setup(dir, dmg, owner_id, proj_color)
+		projectile.visible = true
+		
+		# Immediately sync initial position to clients if we're the server
+		if multiplayer.multiplayer_peer != null and multiplayer.is_server():
+			# Wait another frame to ensure projectile is fully initialized
+			await get_tree().process_frame
+			if projectile.is_inside_tree() and projectile.name != "":
+				projectile.sync_projectile_position.rpc(projectile.position)
+		
 		# Debug: Verify projectile was created
 		print("Projectile spawned at ", projectile.position, " with color ", proj_color)
 
@@ -655,6 +669,7 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, owner_id: int, proj_color: Color):
 	"""RPC to spawn projectile - spawns on all clients"""
 	# Spawn projectile on all clients (including server)
+	# spawn_pos is the position where the projectile should start
 	_spawn_projectile_local(direction, spawn_pos, dmg, owner_id, proj_color)
 
 func _get_projectile_color() -> Color:
