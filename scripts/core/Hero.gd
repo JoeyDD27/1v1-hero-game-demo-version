@@ -722,6 +722,7 @@ func _ranged_attack(direction: Vector2):
 # Track spawned projectiles to prevent duplicates
 var spawned_projectiles: Dictionary = {}  # owner_id + timestamp -> projectile
 var projectile_cleanup_timer: float = 0.0  # Timer for periodic cleanup
+var visual_only_projectiles: Dictionary = {}  # Track visual-only projectiles spawned by guests
 
 func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_key: String = ""):
 	"""Spawn projectile locally (called on all clients via RPC)"""
