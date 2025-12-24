@@ -15,6 +15,9 @@ var rotation_speed: float = 10.0  # Rotation speed for animation
 var pulse_scale: float = 1.0
 var pulse_direction: float = 1.0
 
+# Destruction flag - prevents processing after collision
+var is_destroyed: bool = false
+
 # Network sync
 var network_position: Vector2 = Vector2.ZERO
 var network_update_rate: float = 0.05  # Update every 50ms
@@ -137,6 +140,10 @@ func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Co
 		rotation = direction.angle() + PI / 2.0
 
 func _physics_process(delta):
+	# Don't process if destroyed
+	if is_destroyed:
+		return
+	
 	# Network sync handling
 	if multiplayer.multiplayer_peer != null:
 		# Check if we have authority (server should have authority for all projectiles)
@@ -175,6 +182,10 @@ func _physics_process(delta):
 
 func _process_authority_physics(delta):
 	"""Process physics for authority (server or single player)"""
+	# Don't process if destroyed
+	if is_destroyed:
+		return
+	
 	# Verify we actually have authority
 	if multiplayer.multiplayer_peer != null:
 		if not is_multiplayer_authority():
@@ -201,6 +212,10 @@ func _process_authority_physics(delta):
 	# CRITICAL: This must run on server for ALL projectiles, including guest projectiles
 	_check_collisions()
 	
+	# Don't sync position if destroyed (prevents sending position after collision)
+	if is_destroyed:
+		return
+	
 	# Sync position to clients
 	if multiplayer.multiplayer_peer != null:
 		network_update_timer += delta
@@ -218,6 +233,7 @@ func _process_authority_physics(delta):
 	if position.distance_to(start_position) > max_distance:
 		# Notify hero that projectile is being removed (for cleanup)
 		_notify_projectile_removed()
+		is_destroyed = true
 		queue_free()
 		return
 
@@ -236,6 +252,10 @@ func _notify_projectile_removed():
 @rpc("authority", "call_local", "unreliable")
 func sync_projectile_position(pos: Vector2):
 	"""Sync projectile position to all clients - only called by server (authority)"""
+	# Don't update if destroyed
+	if is_destroyed:
+		return
+	
 	# This RPC is called by the server (authority) to sync position to clients
 	# The call_local flag means it also executes on the server, but we ignore that
 	# because the server already has the correct position
@@ -338,6 +358,10 @@ func _check_collisions():
 				if distance <= collision_radius:
 					# Hit! Apply damage
 					print("Projectile hit! Owner: ", owner_peer_id, " Target: ", hero_player_id, " Damage: ", damage, " Distance: ", distance)
+					
+					# Mark as destroyed IMMEDIATELY to prevent further processing/syncing
+					is_destroyed = true
+					
 					hero.take_damage(damage)
 					
 					# Sync destruction to all clients
@@ -405,6 +429,10 @@ func _check_collisions():
 		
 		# Hit! Apply damage
 		print("Projectile hit (physics query)! Owner: ", owner_peer_id, " Target: ", body_player_id, " Damage: ", damage)
+		
+		# Mark as destroyed IMMEDIATELY to prevent further processing/syncing
+		is_destroyed = true
+		
 		body.take_damage(damage)
 		
 		# Sync destruction to all clients
@@ -419,4 +447,6 @@ func _check_collisions():
 @rpc("authority", "call_local", "reliable")
 func destroy_projectile():
 	"""Sync projectile destruction to all clients"""
+	# Mark as destroyed immediately to prevent further processing
+	is_destroyed = true
 	queue_free()
