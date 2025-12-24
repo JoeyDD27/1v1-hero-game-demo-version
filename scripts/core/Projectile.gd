@@ -161,6 +161,9 @@ func _physics_process(delta):
 		# No direction set - this shouldn't happen, but handle it gracefully
 		print("Warning: Projectile has no direction, cannot move. Owner: ", owner_peer_id)
 	
+	# Check collision with enemies (only on authority)
+	_check_collisions()
+	
 	# Sync position to clients
 	if multiplayer.multiplayer_peer != null:
 		network_update_timer += delta
@@ -192,9 +195,6 @@ func _notify_projectile_removed():
 				if hero.has_method("_cleanup_projectile_tracking") and hero.player_id == owner_peer_id:
 					hero._cleanup_projectile_tracking(owner_peer_id)
 					break
-	
-	# Check collision with enemies (only on authority)
-	_check_collisions()
 
 @rpc("authority", "call_local", "unreliable")
 func sync_projectile_position(pos: Vector2):
