@@ -603,21 +603,40 @@ func _show_area_indicator(pos: Vector2, radius_val: float, color: Color = Color(
 
 func _ranged_attack(direction: Vector2):
 	"""Ranged attack - spawn projectile"""
-	# Network sync: spawn projectile on server so all clients see it
+	# Only spawn projectile on the authority (the player who fired)
+	# Other clients will see it via network sync
 	if multiplayer.multiplayer_peer != null:
-		# Ensure node is in tree and has valid path before calling RPC
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			# Call RPC to spawn projectile on server (which will sync to all clients)
-			spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color())
-		else:
-			# Node not ready, spawn locally only
-			_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
+		# Only spawn if we're the authority (the player who owns this hero)
+		if is_multiplayer_authority():
+			# Ensure node is in tree and has valid path before calling RPC
+			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+				# Spawn locally and sync to all clients via RPC
+				# Use a unique spawn ID to prevent duplicates
+				var spawn_id = Time.get_ticks_msec()
+				spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color(), spawn_id)
+			else:
+				# Node not ready, spawn locally only
+				_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
+		# If not authority, don't spawn - we'll see it from the authority's RPC
 	else:
 		# Single player - spawn locally
 		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
 
-func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: int, proj_color: Color):
-	"""Spawn projectile locally (called on server or single player)"""
+# Track spawned projectiles to prevent duplicates
+var spawned_projectiles: Dictionary = {}  # owner_id + timestamp -> projectile
+
+func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_key: String = ""):
+	"""Spawn projectile locally (called on all clients via RPC)"""
+	# Generate unique identifier for this projectile spawn if not provided
+	if spawn_key == "":
+		var spawn_time = Time.get_ticks_msec()
+		spawn_key = str(owner_id) + "_" + str(spawn_time)
+	
+	# Check if we already spawned this projectile (prevent duplicates from RPC call_local)
+	if spawned_projectiles.has(spawn_key):
+		print("Duplicate projectile spawn prevented: ", spawn_key)
+		return
+	
 	var projectile_scene = preload("res://scenes/Projectile.tscn")
 	var projectile = null
 	
@@ -628,6 +647,14 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		projectile = preload("res://scripts/core/Projectile.gd").new()
 	
 	if projectile:
+		# Mark as spawned immediately to prevent duplicates
+		spawned_projectiles[spawn_key] = projectile
+		
+		# Clean up old entries (keep only last 20)
+		if spawned_projectiles.size() > 20:
+			var oldest_key = spawned_projectiles.keys()[0]
+			spawned_projectiles.erase(oldest_key)
+		
 		# Set position BEFORE adding to scene tree and BEFORE setup
 		# This ensures position is set before _ready() is called
 		projectile.position = pos
@@ -655,6 +682,10 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		projectile.setup(dir, dmg, owner_id, proj_color)
 		projectile.visible = true
 		
+		# Connect to projectile's tree_exited to clean up tracking
+		# Note: tree_exited signal doesn't exist, we'll clean up when projectile is freed
+		# The spawned_projectiles dictionary will be cleaned up when projectile is removed
+		
 		# Immediately sync initial position to clients if we're the server
 		if multiplayer.multiplayer_peer != null and multiplayer.is_server():
 			# Wait another frame to ensure projectile is fully initialized
@@ -663,14 +694,40 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 				projectile.sync_projectile_position.rpc(projectile.position)
 		
 		# Debug: Verify projectile was created
-		print("Projectile spawned at ", projectile.position, " with color ", proj_color)
+		print("Projectile spawned: ", spawn_key, " at ", projectile.position, " with color ", proj_color)
+
+func _cleanup_projectile_tracking(owner_id: int):
+	"""Clean up old projectile tracking entries for a specific owner"""
+	# Remove entries older than 5 seconds
+	var current_time = Time.get_ticks_msec()
+	var keys_to_remove = []
+	
+	for key in spawned_projectiles.keys():
+		# Extract timestamp from key (format: "owner_id_timestamp")
+		var parts = key.split("_")
+		if parts.size() >= 2:
+			var timestamp = int(parts[-1])
+			if current_time - timestamp > 5000:  # 5 seconds old
+				keys_to_remove.append(key)
+	
+	for key in keys_to_remove:
+		spawned_projectiles.erase(key)
 
 @rpc("any_peer", "call_local", "reliable")
-func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, owner_id: int, proj_color: Color):
+func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_id: int = 0):
 	"""RPC to spawn projectile - spawns on all clients"""
-	# Spawn projectile on all clients (including server)
-	# spawn_pos is the position where the projectile should start
-	_spawn_projectile_local(direction, spawn_pos, dmg, owner_id, proj_color)
+	# Use spawn_id to create unique key for duplicate prevention
+	var projectile_key = str(owner_id) + "_" + str(spawn_id)
+	
+	# Check if we already spawned this projectile (prevent duplicates)
+	if spawned_projectiles.has(projectile_key):
+		print("Duplicate projectile spawn prevented via RPC: ", projectile_key)
+		return
+	
+	# Spawn projectile on all clients
+	# This is called from the authority (the player who fired)
+	# All clients (including the caller) spawn it locally
+	_spawn_projectile_local(direction, spawn_pos, dmg, owner_id, proj_color, projectile_key)
 
 func _get_projectile_color() -> Color:
 	"""Get projectile color based on hero type"""

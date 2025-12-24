@@ -157,8 +157,22 @@ func _physics_process(delta):
 	
 	# Check if traveled too far
 	if position.distance_to(start_position) > max_distance:
+		# Notify hero that projectile is being removed (for cleanup)
+		_notify_projectile_removed()
 		queue_free()
 		return
+
+func _notify_projectile_removed():
+	"""Notify hero system that projectile is being removed"""
+	# Find the hero that spawned this projectile and clean up tracking
+	var battle_manager = get_tree().get_first_node_in_group("battle_manager")
+	if battle_manager:
+		var heroes_node = battle_manager.get_node_or_null("Heroes")
+		if heroes_node:
+			for hero in heroes_node.get_children():
+				if hero.has_method("_cleanup_projectile_tracking") and hero.player_id == owner_peer_id:
+					hero._cleanup_projectile_tracking(owner_peer_id)
+					break
 	
 	# Check collision with enemies (only on authority)
 	_check_collisions()
