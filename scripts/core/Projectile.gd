@@ -30,9 +30,11 @@ func _ready():
 		var shape = CircleShape2D.new()
 		shape.radius = PROJECTILE_RADIUS
 		collision.shape = shape
-		collision.collision_layer = 1  # Make sure collision layer is set
-		collision.collision_mask = 1   # Make sure collision mask is set
 		add_child(collision)
+	
+	# Set collision layers on the CharacterBody2D (Projectile) itself, not the CollisionShape2D
+	collision_layer = 1  # Make sure collision layer is set
+	collision_mask = 1   # Make sure collision mask is set
 	
 	# Set up visual - make it more visible
 	if not has_node("Visual"):

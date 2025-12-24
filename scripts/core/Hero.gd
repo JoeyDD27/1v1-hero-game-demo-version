@@ -49,15 +49,11 @@ func _ready():
 		var shape = CircleShape2D.new()
 		shape.radius = 20.0
 		collision.shape = shape
-		collision.collision_layer = 1  # Set collision layer
-		collision.collision_mask = 1   # Set collision mask
 		add_child(collision)
-	else:
-		# Ensure existing collision shape has proper layers
-		var collision = get_node("CollisionShape2D")
-		if collision:
-			collision.collision_layer = 1
-			collision.collision_mask = 1
+	
+	# Set collision layers on the CharacterBody2D (Hero) itself, not the CollisionShape2D
+	collision_layer = 1  # Set collision layer
+	collision_mask = 1   # Set collision mask
 	
 	# Set up visual representation (colored circle)
 	if not has_node("Visual"):
