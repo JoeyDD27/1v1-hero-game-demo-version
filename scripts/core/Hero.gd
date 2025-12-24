@@ -479,6 +479,7 @@ func respawn(spawn_pos: Vector2):
 func attack_toward_mouse():
 	"""Attack toward mouse cursor position"""
 	if is_dead or attack_cooldown > 0.0:
+		print("Attack blocked - is_dead: ", is_dead, " cooldown: ", attack_cooldown)
 		return
 	
 	var mouse_pos = get_global_mouse_position()
@@ -486,6 +487,8 @@ func attack_toward_mouse():
 	
 	# Set attack cooldown
 	attack_cooldown = 1.0 / attack_speed
+	
+	print("Attack triggered - hero_type: ", hero_type, " multiplayer: ", multiplayer.multiplayer_peer != null, " authority: ", is_multiplayer_authority() if multiplayer.multiplayer_peer != null else true)
 	
 	# Always execute attack locally first (for immediate response)
 	# Then sync to other players via RPC if multiplayer is active
@@ -508,8 +511,10 @@ func perform_attack_local(direction: Vector2):
 	"""Perform attack locally (called directly, not via RPC)"""
 	# Only process if we have authority (or single player)
 	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
+		print("perform_attack_local blocked - not authority")
 		return
 	
+	print("perform_attack_local executing - hero_type: ", hero_type)
 	match hero_type:
 		"Fighter":
 			_melee_attack(direction)
@@ -620,6 +625,7 @@ func _show_area_indicator(pos: Vector2, radius_val: float, color: Color = Color(
 
 func _ranged_attack(direction: Vector2):
 	"""Ranged attack - spawn projectile"""
+	print("_ranged_attack called - direction: ", direction, " position: ", position)
 	# Only spawn projectile on the authority (the player who fired)
 	# Other clients will see it via network sync
 	if multiplayer.multiplayer_peer != null:
@@ -627,20 +633,25 @@ func _ranged_attack(direction: Vector2):
 		if is_multiplayer_authority():
 			# Use a unique spawn ID to prevent duplicates
 			var spawn_id = Time.get_ticks_msec()
+			print("_ranged_attack - calling RPC, spawn_id: ", spawn_id, " node ready: ", is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree())
 			
 			# Send RPC to spawn projectile on server and all clients
 			# The server will spawn it with proper authority, and all clients will see it
 			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
 				# RPC with call_local will spawn on all clients including the caller
+				print("Calling spawn_projectile_rpc.rpc()")
 				spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color(), spawn_id)
 			else:
 				# Node not ready for RPC, spawn locally only (fallback for edge cases)
 				print("Warning: Node not ready for projectile RPC, spawning locally only")
 				var projectile_key = str(player_id) + "_" + str(spawn_id)
 				_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key)
+		else:
+			print("_ranged_attack blocked - not authority")
 		# If not authority, don't spawn - we'll see it from the authority's RPC
 	else:
 		# Single player - spawn locally
+		print("Single player mode - spawning locally")
 		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
 
 # Track spawned projectiles to prevent duplicates
@@ -655,15 +666,16 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		spawn_key = str(owner_id) + "_" + str(spawn_time)
 	
 	# Check if we already spawned this projectile (prevent duplicates from RPC call_local)
-	# If spawn_key exists but value is null, it means we're already spawning (race condition prevention)
+	# If spawn_key exists and has a valid projectile, prevent duplicate
+	# If spawn_key exists but value is null, it means spawn_projectile_rpc set a placeholder
+	# and we should continue spawning (this is the expected flow)
 	if spawned_projectiles.has(spawn_key):
 		var existing = spawned_projectiles[spawn_key]
-		if existing != null:
+		if existing != null and is_instance_valid(existing):
 			print("Duplicate projectile spawn prevented: ", spawn_key)
 			return
-		# If null, we're in the middle of spawning, also prevent duplicate
-		print("Projectile already being spawned (race condition prevented): ", spawn_key)
-		return
+		# If null, this is expected - spawn_projectile_rpc set the placeholder, continue spawning
+		# Don't return here - this is the normal flow
 	
 	var projectile_scene = preload("res://scenes/Projectile.tscn")
 	var projectile = null
