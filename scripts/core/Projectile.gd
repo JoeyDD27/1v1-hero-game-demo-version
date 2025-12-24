@@ -131,8 +131,14 @@ func _physics_process(delta):
 				# If we're at origin and network_position is also origin, snap to network_position
 				# This handles the initial spawn case
 				if network_position.distance_to(Vector2.ZERO) < 1.0:
-					# Wait for first position update
-					pass
+					# Wait for first position update - but if we've been waiting too long, use initial position
+					# This prevents projectiles from staying stuck at spawn
+					if position.distance_to(start_position) < 10.0:
+						# Still at spawn, wait for update
+						pass
+					else:
+						# Moved away from spawn, use current position
+						network_position = position
 				else:
 					position = network_position
 			# Still animate visuals
@@ -144,12 +150,16 @@ func _physics_process(delta):
 	_animate_projectile(delta)
 	
 	# Move projectile
-	velocity = direction * speed
-	move_and_slide()
-	
-	# Rotate projectile in direction of movement
+	# CRITICAL: Only move if we have a valid direction
 	if direction.length() > 0:
+		velocity = direction * speed
+		move_and_slide()
+		
+		# Rotate projectile in direction of movement
 		rotation = direction.angle() + PI / 2.0  # Face direction of travel
+	else:
+		# No direction set - this shouldn't happen, but handle it gracefully
+		print("Warning: Projectile has no direction, cannot move. Owner: ", owner_peer_id)
 	
 	# Sync position to clients
 	if multiplayer.multiplayer_peer != null:
@@ -158,6 +168,10 @@ func _physics_process(delta):
 			# Ensure node is in tree and has valid path before calling RPC
 			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
 				sync_projectile_position.rpc(position)
+			else:
+				# Debug: Log when RPC can't be sent
+				if network_update_timer == network_update_rate:  # Only log once per update cycle
+					print("Warning: Cannot sync projectile position - node not ready. In tree: ", is_inside_tree(), " name: ", name)
 			network_update_timer = 0.0
 	
 	# Check if traveled too far
@@ -184,7 +198,12 @@ func _notify_projectile_removed():
 
 @rpc("authority", "call_local", "unreliable")
 func sync_projectile_position(pos: Vector2):
-	"""Sync projectile position to all clients"""
+	"""Sync projectile position to all clients - only called by server (authority)"""
+	# This RPC is called by the server (authority) to sync position to clients
+	# The call_local flag means it also executes on the server, but we ignore that
+	# because the server already has the correct position
+	
+	# Only update if we're NOT the authority (i.e., we're a client)
 	if not is_multiplayer_authority():
 		# Update network position
 		var old_network_pos = network_position

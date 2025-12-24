@@ -625,22 +625,19 @@ func _ranged_attack(direction: Vector2):
 	if multiplayer.multiplayer_peer != null:
 		# Only spawn if we're the authority (the player who owns this hero)
 		if is_multiplayer_authority():
-			# Always spawn locally first (for immediate response, even if RPC fails)
 			# Use a unique spawn ID to prevent duplicates
 			var spawn_id = Time.get_ticks_msec()
-			var projectile_key = str(player_id) + "_" + str(spawn_id)
 			
-			# Spawn locally first
-			_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key)
-			
-			# Then try to sync to other clients via RPC
-			# If RPC fails, at least the local player can still shoot
+			# Send RPC to spawn projectile on server and all clients
+			# The server will spawn it with proper authority, and all clients will see it
 			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-				# Sync to other clients (call_local will also execute locally, but duplicate prevention handles it)
+				# RPC with call_local will spawn on all clients including the caller
 				spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color(), spawn_id)
 			else:
-				# Node not ready for RPC, but we already spawned locally
-				print("Warning: Node not ready for projectile RPC, spawned locally only")
+				# Node not ready for RPC, spawn locally only (fallback for edge cases)
+				print("Warning: Node not ready for projectile RPC, spawning locally only")
+				var projectile_key = str(player_id) + "_" + str(spawn_id)
+				_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key)
 		# If not authority, don't spawn - we'll see it from the authority's RPC
 	else:
 		# Single player - spawn locally
@@ -692,8 +689,15 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		projectile.position = pos
 		
 		# Set multiplayer authority BEFORE adding to scene tree
+		# CRITICAL: Only server should have authority over projectiles
+		# This ensures only server controls movement, clients just interpolate
 		if multiplayer.multiplayer_peer != null:
-			projectile.set_multiplayer_authority(1)  # Server has authority
+			if multiplayer.is_server():
+				projectile.set_multiplayer_authority(1)  # Server has authority
+			else:
+				# Client: set authority to server, but this client won't control it
+				# The server will control movement and sync position via RPC
+				projectile.set_multiplayer_authority(1)  # Server has authority (even though we're client)
 		
 		# Add to scene tree FIRST (so _ready() is called with correct position)
 		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
@@ -733,7 +737,9 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 				projectile.sync_projectile_position.rpc(projectile.position)
 		
 		# Debug: Verify projectile was created
-		print("Projectile spawned: ", spawn_key, " at ", projectile.position, " with color ", proj_color)
+		var is_server = multiplayer.is_server() if multiplayer.multiplayer_peer != null else false
+		var has_authority = projectile.is_multiplayer_authority() if multiplayer.multiplayer_peer != null else true
+		print("Projectile spawned: ", spawn_key, " at ", projectile.position, " is_server: ", is_server, " has_authority: ", has_authority, " owner: ", owner_id)
 	else:
 		# Failed to create projectile, clean up placeholder
 		if spawned_projectiles.has(spawn_key):
@@ -778,23 +784,34 @@ func _cleanup_projectile_tracking(owner_id: int):
 
 @rpc("any_peer", "call_local", "reliable")
 func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_id: int = 0):
-	"""RPC to spawn projectile - spawns on all clients"""
+	"""RPC to spawn projectile - spawns on server and all clients"""
 	# Use spawn_id to create unique key for duplicate prevention
 	var projectile_key = str(owner_id) + "_" + str(spawn_id)
+	var is_server = multiplayer.is_server() if multiplayer.multiplayer_peer != null else false
+	var peer_id = multiplayer.get_unique_id() if multiplayer.multiplayer_peer != null else 0
+	
+	# Debug: Log RPC reception
+	print("spawn_projectile_rpc received - peer: ", peer_id, " is_server: ", is_server, " key: ", projectile_key)
 	
 	# Check if we already spawned this projectile (prevent duplicates)
 	# CRITICAL: Check BEFORE any async operations to prevent race conditions
 	if spawned_projectiles.has(projectile_key):
-		print("Duplicate projectile spawn prevented via RPC: ", projectile_key)
+		var existing = spawned_projectiles[projectile_key]
+		if existing != null:
+			print("Duplicate projectile spawn prevented via RPC: ", projectile_key, " on peer: ", peer_id)
+			return
+		# If null, we're in the middle of spawning, also prevent duplicate
+		print("Projectile already being spawned via RPC (race condition prevented): ", projectile_key, " on peer: ", peer_id)
 		return
 	
 	# Mark as spawning IMMEDIATELY to prevent race conditions from multiple RPC calls
 	# Use a placeholder marker to prevent duplicates during async operations
 	spawned_projectiles[projectile_key] = null  # Placeholder - will be replaced with actual projectile
 	
-	# Spawn projectile on all clients
-	# This is called from the authority (the player who fired)
-	# All clients (including the caller) spawn it locally
+	# Spawn projectile on all clients (including server)
+	# The server will have authority and control movement
+	# Clients will receive position updates and interpolate
+	print("Spawning projectile via RPC - peer: ", peer_id, " is_server: ", is_server, " key: ", projectile_key)
 	_spawn_projectile_local(direction, spawn_pos, dmg, owner_id, proj_color, projectile_key)
 
 func _get_projectile_color() -> Color:
