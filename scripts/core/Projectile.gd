@@ -7,6 +7,7 @@ extends CharacterBody2D
 var direction: Vector2 = Vector2.ZERO
 var start_position: Vector2 = Vector2.ZERO
 var owner_peer_id: int = 0
+var owner_hero_name: String = ""  # Name/path of the hero that fired this projectile
 
 const PROJECTILE_RADIUS = 10.0  # Increased size for better visibility
 
@@ -98,11 +99,12 @@ func _create_visual():
 	inner.polygon = inner_points
 	add_child(inner)
 
-func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Color.YELLOW):
+func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Color.YELLOW, hero_name: String = ""):
 	"""Setup projectile"""
 	direction = dir.normalized()
 	damage = dmg
 	owner_peer_id = owner_id
+	owner_hero_name = hero_name
 	
 	# Initialize network_position to current position (set before this function)
 	network_position = position
@@ -313,6 +315,13 @@ func _check_collisions():
 				if hero_player_id == owner_peer_id:
 					continue
 				
+				# Check if this is the specific hero that fired the projectile
+				# Compare by name or path to avoid hitting the sender
+				if owner_hero_name != "":
+					var hero_name = hero.name if hero.name != "" else str(hero.get_path())
+					if hero_name == owner_hero_name:
+						continue  # Don't hit the hero that fired this projectile
+				
 				# Check if hero is dead
 				var is_dead = hero.get("is_dead")
 				if is_dead != null and is_dead:
@@ -363,14 +372,21 @@ func _check_collisions():
 		if not body.has_method("take_damage"):
 			continue
 		
-		# Make sure it's an enemy hero (different player_id)
-		var body_player_id = body.get("player_id")
-		if body_player_id == null:
-			continue
-		
-		# Must be different player
-		if body_player_id == owner_peer_id:
-			continue
+			# Make sure it's an enemy hero (different player_id)
+			var body_player_id = body.get("player_id")
+			if body_player_id == null:
+				continue
+			
+			# Must be different player
+			if body_player_id == owner_peer_id:
+				continue
+			
+			# Check if this is the specific hero that fired the projectile
+			# Compare by name or path to avoid hitting the sender
+			if owner_hero_name != "":
+				var body_name = body.name if body.name != "" else str(body.get_path())
+				if body_name == owner_hero_name:
+					continue  # Don't hit the hero that fired this projectile
 		
 		# Check if hero is dead
 		var is_dead = body.get("is_dead")

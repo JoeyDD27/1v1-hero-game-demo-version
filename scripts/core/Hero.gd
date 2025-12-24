@@ -118,11 +118,17 @@ func _on_health_changed(new_health: float, max_hp: float):
 			break
 	
 	# Sync initial position after node is ready and multiplayer is set up
-	if is_multiplayer_authority() and multiplayer.multiplayer_peer != null:
+	if _safe_is_multiplayer_authority() and multiplayer.multiplayer_peer != null:
 		# Wait a couple frames to ensure node is fully in scene tree and replicated
 		await get_tree().process_frame
+		if not _is_node_valid():
+			return
 		await get_tree().process_frame
+		if not _is_node_valid():
+			return
 		await get_tree().process_frame  # Extra frame for multiplayer replication
+		if not _is_node_valid():
+			return
 		# Only sync if we have a valid position and node is in tree
 		# Verify parent chain exists to prevent path resolution errors
 		if position != Vector2.ZERO and is_inside_tree() and name != "" and get_parent() != null:
@@ -130,8 +136,20 @@ func _on_health_changed(new_health: float, max_hp: float):
 			if get_parent().is_inside_tree():
 				# Delay RPC call slightly to ensure node is fully replicated
 				await get_tree().create_timer(0.1).timeout
-				if is_inside_tree() and is_multiplayer_authority():
+				if _is_node_valid() and _safe_is_multiplayer_authority():
 					sync_position.rpc(position)
+
+func _is_node_valid() -> bool:
+	"""Check if node is still valid and in tree"""
+	return is_instance_valid(self) and is_inside_tree() and not is_queued_for_deletion()
+
+func _safe_is_multiplayer_authority() -> bool:
+	"""Safely check if we have multiplayer authority, returns false if node is invalid"""
+	if not _is_node_valid():
+		return false
+	if multiplayer.multiplayer_peer == null:
+		return true  # Single player - we have authority
+	return is_multiplayer_authority()
 
 func _initialize_hero_stats():
 	"""Initialize hero stats based on hero_type"""
@@ -180,6 +198,10 @@ func _get_hero_color() -> Color:
 	return Color.WHITE
 
 func _physics_process(delta):
+	# Safety check: ensure node is still valid
+	if not _is_node_valid():
+		return
+	
 	# Check if multiplayer is active before checking authority
 	if multiplayer.multiplayer_peer == null:
 		# No multiplayer, process normally (single player mode)
@@ -187,7 +209,7 @@ func _physics_process(delta):
 		return
 	
 	# Only process movement if this is the local player's hero
-	if not is_multiplayer_authority():
+	if not _safe_is_multiplayer_authority():
 		# Interpolate network position smoothly
 		# Only interpolate if we have a valid network position
 		var hero_radius = HERO_RADIUS  # Use local variable to avoid warning
@@ -302,7 +324,7 @@ func _process_local_movement(delta):
 		# Only sync if multiplayer is ready and we're the authority
 		# Also check that we have a valid name (ensures node is properly replicated)
 		# Verify parent chain exists to prevent path resolution errors
-		if multiplayer.multiplayer_peer != null and is_multiplayer_authority() and is_inside_tree() and name != "":
+		if multiplayer.multiplayer_peer != null and _safe_is_multiplayer_authority() and is_inside_tree() and name != "":
 			# Ensure parent is also in tree (required for full path resolution like "BattleScene/Heroes/Hero_1")
 			if get_parent() != null and get_parent().is_inside_tree():
 				# Node is in tree and has authority, safe to call RPC
@@ -319,7 +341,7 @@ func sync_position(pos: Vector2):
 	if multiplayer.multiplayer_peer == null:
 		return
 	# Only process if we're not the authority (we receive other players' positions)
-	if not is_multiplayer_authority():
+	if not _safe_is_multiplayer_authority():
 		network_position = pos
 		# Immediately snap to position if it's way off (initial sync or teleport)
 		if position.distance_to(pos) > 200:
@@ -347,7 +369,7 @@ func take_damage(amount: float):
 	# If multiplayer is active, route through RPC to authority
 	if multiplayer.multiplayer_peer != null:
 		# If we're the authority, apply damage directly (most reliable)
-		if is_multiplayer_authority():
+		if _safe_is_multiplayer_authority():
 			_apply_damage_internal(amount)
 			return
 		
@@ -411,7 +433,7 @@ func apply_damage_rpc(amount: float):
 		return
 	
 	# Only process on the authority (owner of this hero)
-	if not is_multiplayer_authority():
+	if not _safe_is_multiplayer_authority():
 		return
 	
 	# Apply damage
@@ -482,6 +504,10 @@ func respawn(spawn_pos: Vector2):
 
 func attack_toward_mouse():
 	"""Attack toward mouse cursor position"""
+	# Safety check: ensure node is still valid
+	if not _is_node_valid():
+		return
+	
 	if is_dead or attack_cooldown > 0.0:
 		print("Attack blocked - is_dead: ", is_dead, " cooldown: ", attack_cooldown)
 		return
@@ -492,11 +518,11 @@ func attack_toward_mouse():
 	# Set attack cooldown
 	attack_cooldown = 1.0 / attack_speed
 	
-	print("Attack triggered - hero_type: ", hero_type, " multiplayer: ", multiplayer.multiplayer_peer != null, " authority: ", is_multiplayer_authority() if multiplayer.multiplayer_peer != null else true)
+	print("Attack triggered - hero_type: ", hero_type, " multiplayer: ", multiplayer.multiplayer_peer != null, " authority: ", _safe_is_multiplayer_authority() if multiplayer.multiplayer_peer != null else true)
 	
 	# Always execute attack locally first (for immediate response)
 	# Then sync to other players via RPC if multiplayer is active
-	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+	if multiplayer.multiplayer_peer != null and _safe_is_multiplayer_authority():
 		# Execute locally immediately (shows visual and processes damage)
 		perform_attack_local(attack_dir)
 		
@@ -515,7 +541,7 @@ func attack_toward_mouse():
 func perform_attack_local(direction: Vector2):
 	"""Perform attack locally (called directly, not via RPC)"""
 	# Only process if we have authority (or single player)
-	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
+	if multiplayer.multiplayer_peer != null and not _safe_is_multiplayer_authority():
 		print("perform_attack_local blocked - not authority")
 		return
 	
@@ -642,7 +668,7 @@ func _ranged_attack(direction: Vector2):
 	# Other clients will see it via network sync
 	if multiplayer.multiplayer_peer != null:
 		# Only spawn if we're the authority (the player who owns this hero)
-		if is_multiplayer_authority():
+		if _safe_is_multiplayer_authority():
 			# Use a unique spawn ID to prevent duplicates
 			var spawn_id = Time.get_ticks_msec()
 			print("_ranged_attack - calling RPC, spawn_id: ", spawn_id, " node ready: ", is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree())
@@ -651,26 +677,30 @@ func _ranged_attack(direction: Vector2):
 			# The server will spawn it with proper authority, and all clients will see it
 			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
 				# RPC with call_local will spawn on all clients including the caller
+				# Pass hero name so projectile can avoid colliding with its sender
+				var hero_name = name if name != "" else str(get_path())
 				print("Calling spawn_projectile_rpc.rpc()")
-				spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color(), spawn_id)
+				spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color(), spawn_id, hero_name)
 			else:
 				# Node not ready for RPC, spawn locally only (fallback for edge cases)
 				print("Warning: Node not ready for projectile RPC, spawning locally only")
 				var projectile_key = str(player_id) + "_" + str(spawn_id)
-				_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key)
+				var hero_name = name if name != "" else str(get_path())
+				_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key, hero_name)
 		else:
 			print("_ranged_attack blocked - not authority")
 		# If not authority, don't spawn - we'll see it from the authority's RPC
 	else:
 		# Single player - spawn locally
 		print("Single player mode - spawning locally")
-		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
+		var hero_name = name if name != "" else str(get_path())
+		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), "", hero_name)
 
 # Track spawned projectiles to prevent duplicates
 var spawned_projectiles: Dictionary = {}  # owner_id + timestamp -> projectile
 var projectile_cleanup_timer: float = 0.0  # Timer for periodic cleanup
 
-func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_key: String = ""):
+func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_key: String = "", hero_name: String = ""):
 	"""Spawn projectile locally (called on all clients via RPC)"""
 	# Generate unique identifier for this projectile spawn if not provided
 	if spawn_key == "":
@@ -721,7 +751,7 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 			projectile.set_multiplayer_authority(1)  # Server has authority
 			
 			# Verify authority was set correctly
-			if not projectile.is_multiplayer_authority():
+			if not is_instance_valid(projectile) or not projectile.is_multiplayer_authority():
 				print("ERROR: Projectile authority not set correctly! Expected server (1), got: ", projectile.get_multiplayer_authority())
 		
 		# Add to scene tree FIRST (so _ready() is called with correct position)
@@ -747,7 +777,9 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 			return
 		
 		# Now setup the projectile (position is already set)
-		projectile.setup(dir, dmg, owner_id, proj_color)
+		# Pass the hero's name so projectile can avoid colliding with its sender
+		var hero_name = name if name != "" else str(get_path())
+		projectile.setup(dir, dmg, owner_id, proj_color, hero_name)
 		projectile.visible = true
 		
 		# Connect to projectile's tree_exited to clean up tracking when freed
@@ -763,7 +795,7 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 		
 		# Debug: Verify projectile was created
 		var is_server = multiplayer.is_server() if multiplayer.multiplayer_peer != null else false
-		var has_authority = projectile.is_multiplayer_authority() if multiplayer.multiplayer_peer != null else true
+		var has_authority = (is_instance_valid(projectile) and projectile.is_multiplayer_authority()) if multiplayer.multiplayer_peer != null else true
 		print("Projectile spawned: ", spawn_key, " at ", projectile.position, " is_server: ", is_server, " has_authority: ", has_authority, " owner: ", owner_id)
 	else:
 		# Failed to create projectile, clean up placeholder
@@ -808,7 +840,7 @@ func _cleanup_projectile_tracking(owner_id: int):
 		spawned_projectiles.erase(key)
 
 @rpc("any_peer", "call_local", "reliable")
-func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_id: int = 0):
+func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_id: int = 0, hero_name: String = ""):
 	"""RPC to spawn projectile - spawns on server and all clients"""
 	# Use spawn_id to create unique key for duplicate prevention
 	var projectile_key = str(owner_id) + "_" + str(spawn_id)
@@ -837,7 +869,7 @@ func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, ow
 	# The server will have authority and control movement
 	# Clients will receive position updates and interpolate
 	print("Spawning projectile via RPC - peer: ", peer_id, " is_server: ", is_server, " key: ", projectile_key)
-	_spawn_projectile_local(direction, spawn_pos, dmg, owner_id, proj_color, projectile_key)
+	_spawn_projectile_local(direction, spawn_pos, dmg, owner_id, proj_color, projectile_key, hero_name)
 
 func _get_projectile_color() -> Color:
 	"""Get projectile color based on hero type"""
@@ -851,6 +883,10 @@ func _get_projectile_color() -> Color:
 
 func use_ability_q():
 	"""Use Q ability"""
+	# Safety check: ensure node is still valid
+	if not _is_node_valid():
+		return
+	
 	if is_dead or ability_q_cooldown > 0.0:
 		return
 	
@@ -873,7 +909,7 @@ func use_ability_q():
 			ability_fireball_at_position(mouse_pos)
 	
 	# Network sync - send RPC to other clients (without call_local to avoid duplicate execution)
-	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+	if multiplayer.multiplayer_peer != null and _safe_is_multiplayer_authority():
 		# Ensure node is in tree and has valid path before calling RPC
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
 			# Use rpc_id to send to all OTHER peers (not ourselves)
@@ -885,6 +921,10 @@ func use_ability_q():
 
 func use_ability_e():
 	"""Use E ability"""
+	# Safety check: ensure node is still valid
+	if not _is_node_valid():
+		return
+	
 	if is_dead or ability_e_cooldown > 0.0:
 		return
 	
@@ -907,7 +947,7 @@ func use_ability_e():
 			ability_teleport()
 	
 	# Network sync - send RPC to other clients (without call_local to avoid duplicate execution)
-	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+	if multiplayer.multiplayer_peer != null and _safe_is_multiplayer_authority():
 		# Ensure node is in tree and has valid path before calling RPC
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
 			# Use rpc_id to send to all OTHER peers (not ourselves)
@@ -927,7 +967,10 @@ func use_ability(ability: String, mouse_pos: Vector2 = Vector2.ZERO):
 	# This RPC is only called on OTHER clients (not the authority)
 	# The authority already executed the ability locally
 	# So we only need to show visual effects here
-	var is_authority = is_multiplayer_authority()
+	if not _is_node_valid():
+		return
+	
+	var is_authority = _safe_is_multiplayer_authority()
 	
 	# If we somehow receive this as authority, skip (shouldn't happen with rpc_id)
 	if is_authority:
