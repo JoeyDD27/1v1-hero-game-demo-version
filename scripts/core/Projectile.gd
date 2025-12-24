@@ -248,7 +248,11 @@ func _animate_projectile(delta):
 
 func _check_collisions():
 	"""Check for collisions with enemies - only on server/authority"""
-	# Only check collisions on server/authority to avoid duplicate damage
+	# Only check collisions on server to avoid duplicate damage and prevent client-side spawning
+	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
+		return
+	
+	# Also check authority (for single player)
 	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
 		return
 	
@@ -264,24 +268,35 @@ func _check_collisions():
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
-			# Make sure it's an enemy hero
-			# Check if body has player_id property (using get() instead of has())
+			# Make sure it's an enemy hero (different player_id)
 			var body_player_id = body.get("player_id")
-			if body_player_id != null and body_player_id != owner_peer_id:
-				# Check if hero is dead before checking invincibility
-				var is_dead = body.get("is_dead")
-				if is_dead == null or not is_dead:
-					# Check invincibility
-					var is_invincible = body.get("is_invincible")
-					if is_invincible == null or not is_invincible:
-						body.take_damage(damage)
-						# Sync destruction to all clients
-						if multiplayer.multiplayer_peer != null:
-							# Ensure node is in tree and has valid path before calling RPC
-							if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-								destroy_projectile.rpc()
-						queue_free()
-						return
+			if body_player_id == null:
+				continue  # Not a hero, skip
+			
+			# CRITICAL: Don't hit the owner (prevent self-collision duplicates)
+			if body_player_id == owner_peer_id:
+				continue  # This is the owner, don't damage them
+			
+			# Check if hero is dead before checking invincibility
+			var body_is_dead = body.get("is_dead")
+			if body_is_dead != null and body_is_dead:
+				continue
+			
+			# Check invincibility
+			var body_is_invincible = body.get("is_invincible")
+			if body_is_invincible != null and body_is_invincible:
+				continue
+			
+			# Hit enemy - apply damage
+			body.take_damage(damage)
+			
+			# Sync destruction to all clients
+			if multiplayer.multiplayer_peer != null:
+				# Ensure node is in tree and has valid path before calling RPC
+				if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+					destroy_projectile.rpc()
+			queue_free()
+			return
 
 @rpc("authority", "call_local", "reliable")
 func destroy_projectile():

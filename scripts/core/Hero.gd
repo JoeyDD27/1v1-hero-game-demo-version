@@ -36,6 +36,10 @@ var network_position: Vector2 = Vector2.ZERO
 var network_update_rate: float = 0.05  # Update every 50ms
 var network_update_timer: float = 0.0
 
+# Periodic state sync (server -> clients)
+var state_sync_rate: float = 0.1  # Sync every 100ms
+var state_sync_timer: float = 0.0
+
 signal hero_died
 signal health_changed(new_health: float, max_health: float)
 
@@ -231,6 +235,21 @@ func _process_local_movement(delta):
 	if projectile_cleanup_timer >= 2.0:
 		_cleanup_invalid_projectiles()
 		projectile_cleanup_timer = 0.0
+	
+	# GUESTS: Update local cooldowns for UI feedback (will be overwritten by server sync)
+	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
+		attack_cooldown = max(0.0, attack_cooldown - delta)
+		ability_q_cooldown = max(0.0, ability_q_cooldown - delta)
+		ability_e_cooldown = max(0.0, ability_e_cooldown - delta)
+		
+		# Update rapid fire visual (server manages actual state)
+		if rapid_fire_active:
+			rapid_fire_timer -= delta
+			if rapid_fire_timer <= 0.0:
+				rapid_fire_active = false
+				var visual = get_node_or_null("Visual")
+				if visual is Polygon2D:
+					visual.color = _get_hero_color()
 	
 	# Don't process if dead
 	if is_dead:
@@ -441,6 +460,9 @@ func sync_health_rpc(new_health: float, max_hp: float):
 	current_health = new_health
 	max_health = max_hp
 	health_changed.emit(current_health, max_health)
+	# Debug for guests
+	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
+		print("Guest received health sync: ", current_health, "/", max_health, " for player_id: ", player_id)
 
 func die():
 	"""Handle hero death"""
@@ -460,10 +482,13 @@ func die():
 
 @rpc("authority", "call_local", "reliable")
 func sync_death_state_rpc(dead: bool):
-	"""Sync death state to all clients"""
+	"""Sync death state to all clients - guests update their local copy"""
 	is_dead = dead
 	if is_dead:
 		hero_died.emit()
+		# Guests need to know when they die for hero switching
+		if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
+			print("Guest hero died - player_id: ", player_id, " is_dead: ", is_dead)
 
 func respawn(spawn_pos: Vector2):
 	"""Respawn hero at spawn position"""
@@ -1194,3 +1219,81 @@ func spawn_damage_number(amount: float):
 			battle_scene.add_child(damage_num)
 		else:
 			get_tree().root.add_child(damage_num)
+
+func _sync_state_to_clients():
+	"""Server sends complete state to all clients periodically"""
+	if not multiplayer.is_server():
+		return
+	
+	# Ensure node is ready before sending RPC
+	if not is_inside_tree() or name == "" or get_parent() == null or not get_parent().is_inside_tree():
+		return
+	
+	# Send complete state to all clients
+	sync_complete_state.rpc(
+		current_health,
+		max_health,
+		is_dead,
+		attack_cooldown,
+		ability_q_cooldown,
+		ability_e_cooldown,
+		rapid_fire_active,
+		rapid_fire_timer,
+		position,
+		spawn_protection,
+		is_invincible
+	)
+
+@rpc("authority", "call_local", "reliable")
+func sync_complete_state(
+	hp: float,
+	max_hp: float,
+	dead: bool,
+	atk_cd: float,
+	q_cd: float,
+	e_cd: float,
+	rapid_fire: bool,
+	rapid_fire_time: float,
+	pos: Vector2,
+	spawn_prot: float,
+	invincible: bool
+):
+	"""Guest receives complete state from server and updates local copy"""
+	# Update health
+	if current_health != hp or max_health != max_hp:
+		current_health = hp
+		max_health = max_hp
+		health_changed.emit(current_health, max_health)
+	
+	# Update death state
+	if is_dead != dead:
+		is_dead = dead
+		if is_dead:
+			hero_died.emit()
+	
+	# Update cooldowns (server is source of truth)
+	attack_cooldown = atk_cd
+	ability_q_cooldown = q_cd
+	ability_e_cooldown = e_cd
+	
+	# Update rapid fire state
+	if rapid_fire_active != rapid_fire:
+		rapid_fire_active = rapid_fire
+		var visual = get_node_or_null("Visual")
+		if visual is Polygon2D:
+			if rapid_fire_active:
+				visual.color = Color.GREEN
+			else:
+				visual.color = _get_hero_color()
+	rapid_fire_timer = rapid_fire_time
+	
+	# Update position (interpolate smoothly)
+	if not is_multiplayer_authority():
+		network_position = pos
+		# Snap if too far away (teleport/dash)
+		if position.distance_to(pos) > 200:
+			position = pos
+	
+	# Update spawn protection and invincibility
+	spawn_protection = spawn_prot
+	is_invincible = invincible
