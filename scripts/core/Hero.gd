@@ -199,39 +199,34 @@ func _physics_process(delta):
 	
 func _process_local_movement(delta):
 	"""Process local movement and input (called when we have authority or no multiplayer)"""
-	# Update cooldowns for UI feedback (guests update locally, server is source of truth)
-	# Server will sync cooldowns back via RPC, but guests need local updates for responsive UI
+	# Update cooldowns
 	attack_cooldown = max(0.0, attack_cooldown - delta)
 	ability_q_cooldown = max(0.0, ability_q_cooldown - delta)
 	ability_e_cooldown = max(0.0, ability_e_cooldown - delta)
 	
-	# Only server/authority updates buffs and spawn protection
-	if multiplayer.multiplayer_peer == null or is_multiplayer_authority():
-		
-		# Update rapid fire buff (server manages this)
-		if rapid_fire_active:
-			rapid_fire_timer -= delta
-			if rapid_fire_timer <= 0.0:
-				rapid_fire_active = false
-				attack_speed /= 2.0  # Restore normal attack speed
-				# Restore visual color
-				var visual = get_node_or_null("Visual")
-				if visual is Polygon2D:
-					visual.color = _get_hero_color()
-		
-		# Update spawn protection (server manages this)
-		if spawn_protection > 0.0:
-			spawn_protection -= delta
-			is_invincible = spawn_protection > 0.0
-		else:
-			is_invincible = false
-	
 	# Periodic cleanup of invalid projectiles from tracking (every 2 seconds)
-	# All clients can do this for their local projectile tracking
 	projectile_cleanup_timer += delta
 	if projectile_cleanup_timer >= 2.0:
 		_cleanup_invalid_projectiles()
 		projectile_cleanup_timer = 0.0
+	
+	# Update rapid fire buff
+	if rapid_fire_active:
+		rapid_fire_timer -= delta
+		if rapid_fire_timer <= 0.0:
+			rapid_fire_active = false
+			attack_speed /= 2.0  # Restore normal attack speed
+			# Restore visual color
+			var visual = get_node_or_null("Visual")
+			if visual is Polygon2D:
+				visual.color = _get_hero_color()
+	
+	# Update spawn protection
+	if spawn_protection > 0.0:
+		spawn_protection -= delta
+		is_invincible = spawn_protection > 0.0
+	else:
+		is_invincible = false
 	
 	# Don't process if dead
 	if is_dead:
@@ -288,35 +283,14 @@ func _process_local_movement(delta):
 	position.y = clamp(position.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 	
 	# Handle attack input
-	# GUESTS: Send to server, server validates cooldown
-	if Input.is_action_just_pressed("attack"):
-		if multiplayer.multiplayer_peer == null or is_multiplayer_authority():
-			# Server/authority: Check cooldown locally
-			if attack_cooldown <= 0.0:
-				attack_toward_mouse()
-		else:
-			# Guest: Send to server (server will validate cooldown)
-			attack_toward_mouse()  # This will send RPC to server
+	if Input.is_action_just_pressed("attack") and attack_cooldown <= 0.0:
+		attack_toward_mouse()
 	
 	# Handle ability inputs
-	# GUESTS: Send to server, server validates cooldown
-	if Input.is_action_just_pressed("ability_q"):
-		if multiplayer.multiplayer_peer == null or is_multiplayer_authority():
-			# Server/authority: Check cooldown locally
-			if ability_q_cooldown <= 0.0:
-				use_ability_q()
-		else:
-			# Guest: Send to server (server will validate cooldown)
-			use_ability_q()  # This will send RPC to server
-	
-	if Input.is_action_just_pressed("ability_e"):
-		if multiplayer.multiplayer_peer == null or is_multiplayer_authority():
-			# Server/authority: Check cooldown locally
-			if ability_e_cooldown <= 0.0:
-				use_ability_e()
-		else:
-			# Guest: Send to server (server will validate cooldown)
-			use_ability_e()  # This will send RPC to server
+	if Input.is_action_just_pressed("ability_q") and ability_q_cooldown <= 0.0:
+		use_ability_q()
+	if Input.is_action_just_pressed("ability_e") and ability_e_cooldown <= 0.0:
+		use_ability_e()
 	
 	# Sync position over network
 	network_update_timer += delta
@@ -365,15 +339,15 @@ func _update_visual_color():
 		visual.color = _get_hero_color()
 
 func take_damage(amount: float):
-	"""Apply damage to hero - server-authoritative: only server processes damage"""
-	# If multiplayer is active, route through RPC to server
+	"""Apply damage to hero - call this via RPC for network sync"""
+	# If multiplayer is active, route through RPC to authority
 	if multiplayer.multiplayer_peer != null:
-		# Server processes damage directly
-		if multiplayer.is_server():
+		# If we're the authority, apply damage directly (most reliable)
+		if is_multiplayer_authority():
 			_apply_damage_internal(amount)
 			return
 		
-		# Client: Send RPC to server
+		# Not the authority - need to send RPC to authority
 		# Ensure node is in tree and has a valid path before calling RPC
 		if not is_inside_tree() or name == "":
 			# Node not ready, can't apply damage
@@ -384,26 +358,16 @@ func take_damage(amount: float):
 			# Parent not ready, can't resolve path for RPC
 			return
 		
-		# Send to server (peer 1)
-		apply_damage_rpc.rpc_id(1, amount)
+		# Use rpc() instead of rpc_id() - the RPC function already filters by authority
+		# This avoids path resolution issues when calling rpc_id() on a node that might not exist on the target peer
+		apply_damage_rpc.rpc(amount)
 		return
 	
 	# Single player - apply damage directly
 	_apply_damage_internal(amount)
 
-func _server_apply_damage(amount: float):
-	"""Server-only function to apply damage directly (bypasses RPC)"""
-	# Only server can call this
-	if not multiplayer.is_server():
-		return
-	_apply_damage_internal(amount)
-
 func _apply_damage_internal(amount: float):
-	"""Internal function that actually applies damage - ONLY called on server"""
-	# Only server processes damage
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Internal function that actually applies damage (called on authority)"""
 	if is_invincible or is_dead:
 		return
 	
@@ -415,7 +379,7 @@ func _apply_damage_internal(amount: float):
 	current_health -= amount
 	current_health = max(0.0, current_health)
 	
-	# Sync health to all clients (server calls this)
+	# Sync health to all clients
 	if multiplayer.multiplayer_peer != null:
 		# Ensure node is in tree and has valid path before calling RPC
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
@@ -433,57 +397,37 @@ func _apply_damage_internal(amount: float):
 	if current_health <= 0.0 and not is_dead:
 		die()
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_local", "reliable")
 func apply_damage_rpc(amount: float):
-	"""RPC to apply damage - only server processes this"""
-	# Only server processes damage
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
+	"""RPC to apply damage - only executes on authority"""
+	# Safety check: ensure multiplayer is active
+	if multiplayer.multiplayer_peer == null:
+		# Single player mode - apply damage directly
+		_apply_damage_internal(amount)
 		return
 	
-	# Apply damage (server validates invincibility/death internally)
+	# Only process on the authority (owner of this hero)
+	if not is_multiplayer_authority():
+		return
+	
+	# Apply damage
 	_apply_damage_internal(amount)
 
-@rpc("any_peer", "reliable")
-func sync_attack_cooldown(new_cooldown: float):
-	"""Sync attack cooldown from server to clients"""
-	attack_cooldown = new_cooldown
-
-@rpc("any_peer", "reliable")
-func sync_ability_cooldown(ability: String, new_cooldown: float):
-	"""Sync ability cooldown from server to clients"""
-	match ability:
-		"q":
-			ability_q_cooldown = new_cooldown
-		"e":
-			ability_e_cooldown = new_cooldown
-
-@rpc("any_peer", "reliable")
+@rpc("authority", "call_local", "reliable")
 func sync_health_rpc(new_health: float, max_hp: float):
-	"""Sync health value to all clients - only server calls this"""
-	# Update health on all clients (including server)
+	"""Sync health value to all clients"""
 	current_health = new_health
 	max_health = max_hp
 	health_changed.emit(current_health, max_health)
-	
-	# Guests can detect death locally for UI feedback (server will also sync is_dead)
-	# But we rely on server's is_dead flag for actual death state
-	if current_health <= 0.0 and not is_dead:
-		# Health is 0 but server hasn't synced death yet - wait for server
-		# The server will call sync_death_state_rpc when die() is called
-		pass
 
 func die():
-	"""Handle hero death - ONLY called on server"""
-	# Only server processes death
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Handle hero death"""
 	if is_dead:
 		return
 	
 	is_dead = true
 	
-	# Sync death state to all clients (server calls this)
+	# Sync death state to all clients
 	if multiplayer.multiplayer_peer != null:
 		# Ensure node is in tree and has valid path before calling RPC
 		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
@@ -492,19 +436,15 @@ func die():
 	hero_died.emit()
 	print("Hero ", hero_type, " died!")
 
-@rpc("any_peer", "reliable")
+@rpc("authority", "call_local", "reliable")
 func sync_death_state_rpc(dead: bool):
-	"""Sync death state to all clients - only server calls this"""
+	"""Sync death state to all clients"""
 	is_dead = dead
 	if is_dead:
 		hero_died.emit()
 
 func respawn(spawn_pos: Vector2):
-	"""Respawn hero at spawn position - ONLY called on server"""
-	# Only server processes respawn
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Respawn hero at spawn position"""
 	is_dead = false
 	current_health = max_health
 	position = spawn_pos
@@ -539,82 +479,42 @@ func respawn(spawn_pos: Vector2):
 func attack_toward_mouse():
 	"""Attack toward mouse cursor position"""
 	if is_dead or attack_cooldown > 0.0:
+		print("Attack blocked - is_dead: ", is_dead, " cooldown: ", attack_cooldown)
 		return
 	
 	var mouse_pos = get_global_mouse_position()
 	var attack_dir = (mouse_pos - position).normalized()
 	
-	# GUESTS: Show animation immediately (client-side prediction), then send to server
-	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
-		# Show visual effects immediately for instant feedback
-		_show_attack_visuals(attack_dir)
-		# Set local cooldown for UI feedback (server will validate and sync back if different)
-		attack_cooldown = 1.0 / attack_speed
-		# Send request to server for damage processing
-		# Include hero position so server can calculate correct direction relative to server's position
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			request_attack.rpc(attack_dir, position)  # Send direction and position to server
-		return
-	
-	# SERVER/Authority: Process attack locally and sync to clients
-	if multiplayer.multiplayer_peer != null:
-		# Server processes attack
-		perform_attack_local(attack_dir)
-		# Sync to all clients (excluding server)
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			var peers = multiplayer.get_peers()
-			for peer_id in peers:
-				perform_attack.rpc_id(peer_id, attack_dir)
-			# Sync cooldown to all clients
-			sync_attack_cooldown.rpc(attack_cooldown)
-	else:
-		# Single player - process locally
-		perform_attack_local(attack_dir)
-
-@rpc("any_peer", "reliable")
-func request_attack(direction: Vector2, guest_hero_pos: Vector2 = Vector2.ZERO):
-	"""Guest requests server to perform attack - only server processes this"""
-	# Only server processes attack requests
-	if not multiplayer.is_server():
-		return
-	
-	# Ensure node is ready
-	if not is_inside_tree() or name == "":
-		print("Warning: request_attack called but node not ready")
-		return
-	
-	# Server validates cooldown
-	if attack_cooldown > 0.0:
-		# Still on cooldown - sync cooldown back to guest so they know it was rejected
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			sync_attack_cooldown.rpc(attack_cooldown)
-		return  # Still on cooldown, ignore request
-	
-	# Adjust direction if guest's position differs from server's position
-	# This ensures attack direction is correct relative to server's hero position
-	var adjusted_direction = direction
-	if guest_hero_pos != Vector2.ZERO and guest_hero_pos.distance_to(position) > 10.0:
-		# Guest's position differs significantly - recalculate direction from server's position
-		# But we don't have guest's mouse position, so we'll use the direction as-is
-		# The direction vector should be fine since it's normalized
-		pass
-	
-	# Server processes the attack
-	perform_attack_local(adjusted_direction)
-	# Sync result to all clients (excluding server - use rpc_id to send to each client)
-	if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-		# Send to all connected peers except server (peer 1)
-		var peers = multiplayer.get_peers()
-		for peer_id in peers:
-			perform_attack.rpc_id(peer_id, adjusted_direction)
-		# Also sync cooldown to all clients
-		sync_attack_cooldown.rpc(attack_cooldown)
-
-func perform_attack_local(direction: Vector2):
-	"""Perform attack locally - ONLY called on server/authority"""
-	# Set attack cooldown (server manages this)
+	# Set attack cooldown
 	attack_cooldown = 1.0 / attack_speed
 	
+	print("Attack triggered - hero_type: ", hero_type, " multiplayer: ", multiplayer.multiplayer_peer != null, " authority: ", is_multiplayer_authority() if multiplayer.multiplayer_peer != null else true)
+	
+	# Always execute attack locally first (for immediate response)
+	# Then sync to other players via RPC if multiplayer is active
+	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+		# Execute locally immediately (don't rely on RPC call_local)
+		perform_attack_local(attack_dir)
+		
+		# Then try to sync to other players via RPC
+		# If RPC fails, at least the local player can still shoot
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			perform_attack.rpc(attack_dir)
+		else:
+			# Node not ready for RPC, but we already executed locally
+			print("Warning: Node not ready for RPC, attack executed locally only")
+	else:
+		# Single player or not authority - process locally
+		perform_attack_local(attack_dir)
+
+func perform_attack_local(direction: Vector2):
+	"""Perform attack locally (called directly, not via RPC)"""
+	# Only process if we have authority (or single player)
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
+		print("perform_attack_local blocked - not authority")
+		return
+	
+	print("perform_attack_local executing - hero_type: ", hero_type)
 	match hero_type:
 		"Fighter":
 			_melee_attack(direction)
@@ -623,27 +523,25 @@ func perform_attack_local(direction: Vector2):
 
 @rpc("any_peer", "reliable")
 func perform_attack(direction: Vector2):
-	"""Server syncs attack to all clients - all clients see visual effects"""
-	# Skip if we're the server (server already processed and doesn't need visual sync)
-	if multiplayer.is_server():
+	"""Perform attack via RPC - syncs to all clients (doesn't execute locally, we call perform_attack_local directly)"""
+	# Safety check: ensure multiplayer is active
+	if multiplayer.multiplayer_peer == null:
 		return
 	
-	# This is called on clients to sync visual effects
-	# Server already processed damage, clients show visuals
-	match hero_type:
-		"Fighter":
-			_show_melee_indicator(direction)  # Show indicator on clients
-		"Shooter", "Mage":
-			pass  # Projectiles are spawned by server via spawn_projectile_rpc, clients see them
+	# Only process on authority in multiplayer (other clients just receive the sync)
+	# Non-authority clients should not process attacks (they see projectiles via spawn_projectile_rpc)
+	if not is_multiplayer_authority():
+		return
+	
+	# Execute the attack (authority processes it)
+	# Note: This is called from OTHER peers, not the local peer
+	# The local peer already executed perform_attack_local() directly
+	perform_attack_local(direction)
 
 func _melee_attack(direction: Vector2):
-	"""Melee attack - cone/line attack in direction - ONLY called on server"""
-	# Only server processes damage
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
-	# Don't show indicator here - it will be shown via perform_attack RPC to all clients
-	# This prevents duplicate indicators on server
+	"""Melee attack - cone/line attack in direction"""
+	# Show melee attack indicator
+	_show_melee_indicator(direction)
 	
 	# Find enemies in attack range and direction
 	var space_state = get_world_2d().direct_space_state
@@ -681,21 +579,7 @@ func _melee_attack(direction: Vector2):
 			if dot > 0.5:
 				var distance = position.distance_to(body.global_position)
 				if distance <= attack_range:
-					# Server applies damage directly (bypasses RPC)
-					if body.has_method("_server_apply_damage"):
-						body._server_apply_damage(attack_damage)
-					else:
-						# Fallback to take_damage if _server_apply_damage doesn't exist
-						body.take_damage(attack_damage)
-
-func _show_attack_visuals(direction: Vector2):
-	"""Show attack visuals without processing damage (for client-side prediction)"""
-	match hero_type:
-		"Fighter":
-			_show_melee_indicator(direction)
-		"Shooter", "Mage":
-			# Spawn visual-only projectile (no damage, just visual)
-			_spawn_projectile_visual_only(direction)
+					body.take_damage(attack_damage)
 
 func _show_melee_indicator(direction: Vector2):
 	"""Show visual indicator for melee attack"""
@@ -740,30 +624,39 @@ func _show_area_indicator(pos: Vector2, radius_val: float, color: Color = Color(
 			get_tree().root.add_child(indicator)
 
 func _ranged_attack(direction: Vector2):
-	"""Ranged attack - spawn projectile - ONLY called on server"""
-	# Only server spawns projectiles
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
-	# Use a unique spawn ID to prevent duplicates
-	var spawn_id = Time.get_ticks_msec()
-	
-	# Server spawns projectile and syncs to all clients
-	if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-		# Server spawns locally and tells all clients to spawn it too
-		var projectile_key = str(player_id) + "_" + str(spawn_id)
-		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key)
-		# Sync to all clients
-		spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color(), spawn_id)
+	"""Ranged attack - spawn projectile"""
+	print("_ranged_attack called - direction: ", direction, " position: ", position)
+	# Only spawn projectile on the authority (the player who fired)
+	# Other clients will see it via network sync
+	if multiplayer.multiplayer_peer != null:
+		# Only spawn if we're the authority (the player who owns this hero)
+		if is_multiplayer_authority():
+			# Use a unique spawn ID to prevent duplicates
+			var spawn_id = Time.get_ticks_msec()
+			print("_ranged_attack - calling RPC, spawn_id: ", spawn_id, " node ready: ", is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree())
+			
+			# Send RPC to spawn projectile on server and all clients
+			# The server will spawn it with proper authority, and all clients will see it
+			if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+				# RPC with call_local will spawn on all clients including the caller
+				print("Calling spawn_projectile_rpc.rpc()")
+				spawn_projectile_rpc.rpc(direction, position, attack_damage, player_id, _get_projectile_color(), spawn_id)
+			else:
+				# Node not ready for RPC, spawn locally only (fallback for edge cases)
+				print("Warning: Node not ready for projectile RPC, spawning locally only")
+				var projectile_key = str(player_id) + "_" + str(spawn_id)
+				_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key)
+		else:
+			print("_ranged_attack blocked - not authority")
+		# If not authority, don't spawn - we'll see it from the authority's RPC
 	else:
-		# Fallback: spawn locally only if node not ready
-		var projectile_key = str(player_id) + "_" + str(spawn_id)
-		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color(), projectile_key)
+		# Single player - spawn locally
+		print("Single player mode - spawning locally")
+		_spawn_projectile_local(direction, position, attack_damage, player_id, _get_projectile_color())
 
 # Track spawned projectiles to prevent duplicates
 var spawned_projectiles: Dictionary = {}  # owner_id + timestamp -> projectile
 var projectile_cleanup_timer: float = 0.0  # Timer for periodic cleanup
-var visual_only_projectiles: Dictionary = {}  # Track visual-only projectiles spawned by guests
 
 func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_key: String = ""):
 	"""Spawn projectile locally (called on all clients via RPC)"""
@@ -865,87 +758,6 @@ func _spawn_projectile_local(dir: Vector2, pos: Vector2, dmg: float, owner_id: i
 			spawned_projectiles.erase(spawn_key)
 
 
-func _spawn_projectile_visual_only(direction: Vector2):
-	"""Spawn projectile for visual only (no damage, no server sync) - for client-side prediction"""
-	# Generate unique key for visual-only projectile (prefixed with "visual_" to avoid conflicts)
-	var spawn_time = Time.get_ticks_msec()
-	var visual_key = "visual_" + str(player_id) + "_" + str(spawn_time)
-	
-	# Check if we already spawned this visual projectile
-	if visual_only_projectiles.has(visual_key):
-		var existing = visual_only_projectiles[visual_key]
-		if existing != null and is_instance_valid(existing):
-			return  # Already spawned
-	
-	# Mark as spawning
-	visual_only_projectiles[visual_key] = null
-	
-	var projectile_scene = preload("res://scenes/Projectile.tscn")
-	var projectile = null
-	
-	if projectile_scene:
-		projectile = projectile_scene.instantiate()
-	else:
-		projectile = preload("res://scripts/core/Projectile.gd").new()
-	
-	if projectile:
-		# Mark as spawned
-		visual_only_projectiles[visual_key] = projectile
-		
-		# Clean up old entries
-		if visual_only_projectiles.size() > 10:
-			var oldest_key = visual_only_projectiles.keys()[0]
-			visual_only_projectiles.erase(oldest_key)
-		
-		# Set position
-		projectile.position = position
-		
-		# Set as visual-only (no authority, no damage)
-		# Visual-only projectiles don't need authority - they're just for display
-		projectile.set_multiplayer_authority(0)  # No authority - visual only
-		
-		# Add to scene tree
-		var battle_scene = get_tree().get_first_node_in_group("battle_manager")
-		if battle_scene:
-			var projectiles_node = battle_scene.get_node_or_null("Projectiles")
-			if projectiles_node:
-				projectiles_node.add_child(projectile, true)
-			else:
-				battle_scene.add_child(projectile, true)
-		else:
-			get_tree().root.add_child(projectile, true)
-		
-		# Wait a frame
-		await get_tree().process_frame
-		
-		# Verify still valid
-		if not is_instance_valid(projectile):
-			if visual_only_projectiles.has(visual_key):
-				visual_only_projectiles.erase(visual_key)
-			return
-		
-		# Setup projectile (visual only - damage is 0, owner is self for tracking)
-		projectile.setup(direction, 0.0, player_id, _get_projectile_color())  # 0 damage - visual only
-		projectile.visible = true
-		
-		# Visual-only projectiles move locally (no server sync needed)
-		# They will be replaced by server's real projectile when it arrives
-		
-		# Clean up when projectile is removed
-		if projectile.tree_exited.is_connected(_on_visual_projectile_removed.bind(visual_key)):
-			pass  # Already connected
-		else:
-			projectile.tree_exited.connect(_on_visual_projectile_removed.bind(visual_key))
-	else:
-		# Failed to create
-		if visual_only_projectiles.has(visual_key):
-			visual_only_projectiles.erase(visual_key)
-
-func _on_visual_projectile_removed(visual_key: String):
-	"""Callback when visual-only projectile is removed"""
-	if visual_only_projectiles.has(visual_key):
-		visual_only_projectiles.erase(visual_key)
-
 func _cleanup_invalid_projectiles():
 	"""Clean up invalid projectiles from tracking dictionary"""
 	var keys_to_remove = []
@@ -958,16 +770,6 @@ func _cleanup_invalid_projectiles():
 	
 	for key in keys_to_remove:
 		spawned_projectiles.erase(key)
-	
-	# Also clean up visual-only projectiles
-	keys_to_remove.clear()
-	for key in visual_only_projectiles.keys():
-		var projectile = visual_only_projectiles[key]
-		if projectile == null or not is_instance_valid(projectile):
-			keys_to_remove.append(key)
-	
-	for key in keys_to_remove:
-		visual_only_projectiles.erase(key)
 
 func _cleanup_projectile_tracking(owner_id: int):
 	"""Clean up old projectile tracking entries for a specific owner"""
@@ -992,25 +794,36 @@ func _cleanup_projectile_tracking(owner_id: int):
 	for key in keys_to_remove:
 		spawned_projectiles.erase(key)
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_local", "reliable")
 func spawn_projectile_rpc(direction: Vector2, spawn_pos: Vector2, dmg: float, owner_id: int, proj_color: Color, spawn_id: int = 0):
-	"""Server tells clients to spawn projectile - all clients display it"""
+	"""RPC to spawn projectile - spawns on server and all clients"""
 	# Use spawn_id to create unique key for duplicate prevention
 	var projectile_key = str(owner_id) + "_" + str(spawn_id)
+	var is_server = multiplayer.is_server() if multiplayer.multiplayer_peer != null else false
+	var peer_id = multiplayer.get_unique_id() if multiplayer.multiplayer_peer != null else 0
+	
+	# Debug: Log RPC reception
+	print("spawn_projectile_rpc received - peer: ", peer_id, " is_server: ", is_server, " key: ", projectile_key)
 	
 	# Check if we already spawned this projectile (prevent duplicates)
+	# CRITICAL: Check BEFORE any async operations to prevent race conditions
 	if spawned_projectiles.has(projectile_key):
 		var existing = spawned_projectiles[projectile_key]
-		if existing != null and is_instance_valid(existing):
-			return  # Already spawned
+		if existing != null:
+			print("Duplicate projectile spawn prevented via RPC: ", projectile_key, " on peer: ", peer_id)
+			return
 		# If null, we're in the middle of spawning, also prevent duplicate
+		print("Projectile already being spawned via RPC (race condition prevented): ", projectile_key, " on peer: ", peer_id)
 		return
 	
-	# Mark as spawning IMMEDIATELY to prevent race conditions
-	spawned_projectiles[projectile_key] = null  # Placeholder
+	# Mark as spawning IMMEDIATELY to prevent race conditions from multiple RPC calls
+	# Use a placeholder marker to prevent duplicates during async operations
+	spawned_projectiles[projectile_key] = null  # Placeholder - will be replaced with actual projectile
 	
-	# All clients spawn projectile for visual display
-	# Server already spawned it with authority, clients just show it
+	# Spawn projectile on all clients (including server)
+	# The server will have authority and control movement
+	# Clients will receive position updates and interpolate
+	print("Spawning projectile via RPC - peer: ", peer_id, " is_server: ", is_server, " key: ", projectile_key)
 	_spawn_projectile_local(direction, spawn_pos, dmg, owner_id, proj_color, projectile_key)
 
 func _get_projectile_color() -> Color:
@@ -1025,191 +838,68 @@ func _get_projectile_color() -> Color:
 
 func use_ability_q():
 	"""Use Q ability"""
-	if is_dead:
+	if is_dead or ability_q_cooldown > 0.0:
 		return
 	
-	# GUESTS: Only send RPC to server, don't process locally
-	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
-		# Guest: Send ability request to server with mouse position
-		# Use rpc() instead of rpc_id() - Godot will route to server automatically
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			var mouse_pos = get_global_mouse_position()
-			request_ability.rpc("q", mouse_pos)  # Send ability name and mouse position
-		return
-	
-	# SERVER/Authority: Check cooldown and process ability
-	if ability_q_cooldown > 0.0:
-		return  # Still on cooldown
-	
-	# Server processes ability
-	if multiplayer.multiplayer_peer != null:
-		_execute_ability_q()
-		# Sync to all clients (excluding server)
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			var peers = multiplayer.get_peers()
-			for peer_id in peers:
-				use_ability.rpc_id(peer_id, "q")
-			# Sync cooldown
-			sync_ability_cooldown.rpc("q", ability_q_cooldown)
-	else:
-		# Single player - process locally
-		_execute_ability_q()
-
-func _execute_ability_q():
-	"""Execute Q ability - ONLY called on server/authority"""
-	_execute_ability_q_with_mouse(get_global_mouse_position())
-
-func _execute_ability_q_with_mouse(mouse_pos: Vector2):
-	"""Execute Q ability with specific mouse position - ONLY called on server"""
+	# Execute ability locally first
 	match hero_type:
 		"Fighter":
-			ability_dash_with_mouse(mouse_pos)
+			ability_dash()
 		"Shooter":
 			ability_rapid_fire()
 		"Mage":
-			ability_fireball_with_mouse(mouse_pos)
+			ability_fireball()
 	
 	ability_q_cooldown = ability_q_max_cooldown
+	
+	# Network sync - only call RPC if we have authority and multiplayer is active
+	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+		# Ensure node is in tree and has valid path before calling RPC
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			use_ability.rpc("q")
+	else:
+		# Single player or not authority - already executed locally
+		pass
 
 func use_ability_e():
 	"""Use E ability"""
-	if is_dead:
+	if is_dead or ability_e_cooldown > 0.0:
 		return
 	
-	# GUESTS: Only send RPC to server, don't process locally
-	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
-		# Guest: Send ability request to server with mouse position
-		# Use rpc() instead of rpc_id() - Godot will route to server automatically
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			var mouse_pos = get_global_mouse_position()
-			request_ability.rpc("e", mouse_pos)  # Send ability name and mouse position
-		return
-	
-	# SERVER/Authority: Check cooldown and process ability
-	if ability_e_cooldown > 0.0:
-		return  # Still on cooldown
-	
-	# Server processes ability
-	if multiplayer.multiplayer_peer != null:
-		_execute_ability_e()
-		# Sync to all clients (excluding server)
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			var peers = multiplayer.get_peers()
-			for peer_id in peers:
-				use_ability.rpc_id(peer_id, "e")
-			# Sync cooldown
-			sync_ability_cooldown.rpc("e", ability_e_cooldown)
-	else:
-		# Single player - process locally
-		_execute_ability_e()
-
-func _execute_ability_e():
-	"""Execute E ability - ONLY called on server/authority"""
-	_execute_ability_e_with_mouse(get_global_mouse_position())
-
-func _execute_ability_e_with_mouse(mouse_pos: Vector2):
-	"""Execute E ability with specific mouse position - ONLY called on server"""
+	# Execute ability locally first
 	match hero_type:
 		"Fighter":
 			ability_shield_bash()
 		"Shooter":
 			ability_pushback()
 		"Mage":
-			ability_teleport_with_mouse(mouse_pos)
+			ability_teleport()
 	
 	ability_e_cooldown = ability_e_max_cooldown
+	
+	# Network sync - only call RPC if we have authority and multiplayer is active
+	if multiplayer.multiplayer_peer != null and is_multiplayer_authority():
+		# Ensure node is in tree and has valid path before calling RPC
+		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+			use_ability.rpc("e")
+	else:
+		# Single player or not authority - already executed locally
+		pass
 
-@rpc("any_peer", "reliable")
-func request_ability(ability: String, mouse_position: Vector2 = Vector2.ZERO):
-	"""Guest requests server to use ability - only server processes this"""
-	# Only server processes ability requests
-	if not multiplayer.is_server():
-		return
-	
-	# Ensure node is ready
-	if not is_inside_tree() or name == "":
-		print("Warning: request_ability called but node not ready")
-		return
-	
-	# Store guest's mouse position for abilities that need it
-	var stored_mouse_pos = mouse_position if mouse_position != Vector2.ZERO else get_global_mouse_position()
-	
-	# Server validates cooldown
-	match ability:
-		"q":
-			if ability_q_cooldown > 0.0:
-				# Still on cooldown - sync cooldown back
-				if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-					sync_ability_cooldown.rpc("q", ability_q_cooldown)
-				return  # Still on cooldown, ignore request
-			_execute_ability_q_with_mouse(stored_mouse_pos)
-		"e":
-			if ability_e_cooldown > 0.0:
-				# Still on cooldown - sync cooldown back
-				if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-					sync_ability_cooldown.rpc("e", ability_e_cooldown)
-				return  # Still on cooldown, ignore request
-			_execute_ability_e_with_mouse(stored_mouse_pos)
-	
-	# Sync result to all clients
-	if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-		# Send to all connected peers except server
-		var peers = multiplayer.get_peers()
-		for peer_id in peers:
-			use_ability.rpc_id(peer_id, ability)
-		# Sync cooldowns to all clients
-		match ability:
-			"q":
-				sync_ability_cooldown.rpc("q", ability_q_cooldown)
-			"e":
-				sync_ability_cooldown.rpc("e", ability_e_cooldown)
-
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_local", "reliable")
 func use_ability(ability: String):
-	"""Server syncs ability to all clients - all clients show visual effects"""
-	# Skip if we're the server (server already processed and doesn't need visual sync)
-	if multiplayer.is_server():
+	"""Network sync for ability usage"""
+	# Safety check: ensure multiplayer is active
+	if multiplayer.multiplayer_peer == null:
 		return
-	
-	# This is called on clients to sync visual effects
-	# Server already processed damage/movement, clients show visuals
-	match ability:
-		"q":
-			match hero_type:
-				"Fighter":
-					# Dash visual - position change is synced via network_position
-					pass  # Position sync happens automatically
-				"Shooter":
-					# Rapid fire visual effect - show green outline
-					var visual = get_node_or_null("Visual")
-					if visual is Polygon2D:
-						visual.color = Color.GREEN
-				"Mage":
-					# Fireball visual handled by server spawning projectile
-					pass
-		"e":
-			match hero_type:
-				"Fighter":
-					# Show shield bash indicator (visual only)
-					_show_area_indicator(position, 150.0, Color(1, 0.5, 0, 0.5))
-				"Shooter":
-					# Pushback visual - position change is synced via network_position
-					pass  # Position sync happens automatically
-				"Mage":
-					# Teleport visual - position change is synced via network_position
-					pass  # Position sync happens automatically
+	# Only process on authority - abilities that deal damage need to be processed on authority
+	if not is_multiplayer_authority():
+		return  # Visual effects only on non-authority
 
 # Fighter Abilities
 func ability_dash():
-	"""Fighter Q: Dash to mouse position - ONLY called on server"""
-	ability_dash_with_mouse(get_global_mouse_position())
-
-func ability_dash_with_mouse(mouse_pos: Vector2):
-	"""Fighter Q: Dash to specified mouse position - ONLY called on server"""
-	# Only server processes movement
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Fighter Q: Dash to mouse position"""
+	var mouse_pos = get_global_mouse_position()
 	var dash_distance = 300.0
 	var dash_dir = (mouse_pos - position).normalized()
 	var dash_target = position + dash_dir * dash_distance
@@ -1219,23 +909,13 @@ func ability_dash_with_mouse(mouse_pos: Vector2):
 	dash_target.y = clamp(dash_target.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 	
 	position = dash_target
-	network_position = dash_target  # Update network position for sync
-	
-	# Explicitly sync position to all clients
-	if multiplayer.multiplayer_peer != null:
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			sync_position.rpc(dash_target)
 
 func ability_shield_bash():
-	"""Fighter E: Area damage around hero - ONLY called on server"""
-	# Only server processes damage
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Fighter E: Area damage around hero"""
 	var bash_radius = 150.0
 	var bash_damage = attack_damage * 1.5
 	
-	# Show area indicator (visual - clients see this via use_ability RPC)
+	# Show area indicator
 	_show_area_indicator(position, bash_radius, Color(1, 0.5, 0, 0.5))  # Orange
 	
 	var space_state = get_world_2d().direct_space_state
@@ -1267,38 +947,25 @@ func ability_shield_bash():
 			
 			var distance = position.distance_to(body.global_position)
 			if distance <= bash_radius:
-				# Server applies damage directly (bypasses RPC)
-				if body.has_method("_server_apply_damage"):
-					body._server_apply_damage(bash_damage)
-				else:
-					# Fallback to take_damage if _server_apply_damage doesn't exist
-					body.take_damage(bash_damage)
+				body.take_damage(bash_damage)
 
 # Shooter Abilities
 var rapid_fire_active: bool = false
 var rapid_fire_timer: float = 0.0
 
 func ability_rapid_fire():
-	"""Shooter Q: Temporary attack speed buff - ONLY called on server"""
-	# Only server processes buffs
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Shooter Q: Temporary attack speed buff"""
 	rapid_fire_active = true
 	rapid_fire_timer = 5.0
 	attack_speed *= 2.0  # Double attack speed
 	
-	# Visual indicator (green outline) - sync to clients via use_ability RPC
+	# Visual indicator (green outline)
 	var visual = get_node_or_null("Visual")
 	if visual is Polygon2D:
 		visual.color = Color.GREEN
 
 func ability_pushback():
-	"""Shooter E: Push nearest enemy away - ONLY called on server"""
-	# Only server processes movement
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Shooter E: Push nearest enemy away"""
 	var push_radius = 400.0
 	var push_force = 200.0
 	
@@ -1318,11 +985,6 @@ func ability_pushback():
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
-			# Check if it's an enemy hero (different player_id)
-			var body_player_id = body.get("player_id")
-			if body_player_id == null or body_player_id == player_id:
-				continue
-			
 			var distance = position.distance_to(body.global_position)
 			if distance < nearest_distance:
 				nearest_distance = distance
@@ -1338,28 +1000,15 @@ func ability_pushback():
 		push_target.y = clamp(push_target.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 		
 		nearest_enemy.position = push_target
-		nearest_enemy.network_position = push_target  # Update network position for sync
-		
-		# Explicitly sync position to all clients if enemy is a hero
-		if nearest_enemy.has_method("sync_position") and multiplayer.multiplayer_peer != null:
-			if nearest_enemy.is_inside_tree() and nearest_enemy.name != "" and nearest_enemy.get_parent() != null and nearest_enemy.get_parent().is_inside_tree():
-				nearest_enemy.sync_position.rpc(push_target)
 
 # Mage Abilities
 func ability_fireball():
-	"""Mage Q: Area damage at target location - ONLY called on server"""
-	ability_fireball_with_mouse(get_global_mouse_position())
-
-func ability_fireball_with_mouse(mouse_pos: Vector2):
-	"""Mage Q: Area damage at specified mouse position - ONLY called on server"""
-	# Only server processes damage
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Mage Q: Area damage at target location"""
+	var mouse_pos = get_global_mouse_position()
 	var fireball_radius = 100.0
 	var fireball_damage = attack_damage * 2.0
 	
-	# Show area indicator at target location (visual - clients see this via use_ability RPC)
+	# Show area indicator at target location
 	_show_area_indicator(mouse_pos, fireball_radius, Color(1, 0, 0, 0.5))  # Red
 	
 	var space_state = get_world_2d().direct_space_state
@@ -1391,23 +1040,11 @@ func ability_fireball_with_mouse(mouse_pos: Vector2):
 			
 			var distance = mouse_pos.distance_to(body.global_position)
 			if distance <= fireball_radius:
-				# Server applies damage directly (bypasses RPC)
-				if body.has_method("_server_apply_damage"):
-					body._server_apply_damage(fireball_damage)
-				else:
-					# Fallback to take_damage if _server_apply_damage doesn't exist
-					body.take_damage(fireball_damage)
+				body.take_damage(fireball_damage)
 
 func ability_teleport():
-	"""Mage E: Instant movement to nearby location - ONLY called on server"""
-	ability_teleport_with_mouse(get_global_mouse_position())
-
-func ability_teleport_with_mouse(mouse_pos: Vector2):
-	"""Mage E: Instant movement to specified mouse position - ONLY called on server"""
-	# Only server processes movement
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
-		return
-	
+	"""Mage E: Instant movement to nearby location"""
+	var mouse_pos = get_global_mouse_position()
 	var teleport_distance = 300.0
 	var teleport_dir = (mouse_pos - position).normalized()
 	var teleport_target = position + teleport_dir * teleport_distance
@@ -1417,12 +1054,6 @@ func ability_teleport_with_mouse(mouse_pos: Vector2):
 	teleport_target.y = clamp(teleport_target.y, HERO_RADIUS, SCREEN_HEIGHT - HERO_RADIUS)
 	
 	position = teleport_target
-	network_position = teleport_target  # Update network position for sync
-	
-	# Explicitly sync position to all clients
-	if multiplayer.multiplayer_peer != null:
-		if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-			sync_position.rpc(teleport_target)
 
 @rpc("any_peer", "call_local", "reliable")
 func spawn_damage_number(amount: float):

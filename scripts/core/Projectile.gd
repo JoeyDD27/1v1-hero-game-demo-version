@@ -119,19 +119,6 @@ func setup(dir: Vector2, dmg: float, owner_id: int, projectile_color: Color = Co
 		rotation = direction.angle() + PI / 2.0
 
 func _physics_process(delta):
-	# Visual-only projectiles (damage = 0) move locally regardless of authority
-	if damage <= 0.0:
-		# Visual-only projectile - move locally
-		_animate_projectile(delta)
-		if direction.length() > 0:
-			velocity = direction * speed
-			move_and_slide()
-			rotation = direction.angle() + PI / 2.0
-		# Check if traveled too far
-		if position.distance_to(start_position) > max_distance:
-			queue_free()
-		return
-	
 	# Network sync handling
 	if multiplayer.multiplayer_peer != null:
 		if not is_multiplayer_authority():
@@ -260,9 +247,9 @@ func _animate_projectile(delta):
 		inner.rotation += rotation_speed * delta
 
 func _check_collisions():
-	"""Check for collisions with enemies - only on server"""
-	# Only check collisions on server to avoid duplicate damage
-	if multiplayer.multiplayer_peer != null and not multiplayer.is_server():
+	"""Check for collisions with enemies - only on server/authority"""
+	# Only check collisions on server/authority to avoid duplicate damage
+	if multiplayer.multiplayer_peer != null and not is_multiplayer_authority():
 		return
 	
 	var space_state = get_world_2d().direct_space_state
@@ -277,35 +264,24 @@ func _check_collisions():
 	for result in results:
 		var body = result.collider
 		if body.has_method("take_damage") and body != self:
-			# Make sure it's an enemy hero (different player_id)
+			# Make sure it's an enemy hero
+			# Check if body has player_id property (using get() instead of has())
 			var body_player_id = body.get("player_id")
-			if body_player_id == null or body_player_id == owner_peer_id:
-				continue  # Skip if same player or no player_id
-			
-			# Check if hero is dead before checking invincibility
-			var is_dead = body.get("is_dead")
-			if is_dead != null and is_dead:
-				continue
-			
-			# Check invincibility
-			var is_invincible = body.get("is_invincible")
-			if is_invincible != null and is_invincible:
-				continue
-			
-			# Server applies damage directly (bypasses RPC)
-			if body.has_method("_server_apply_damage"):
-				body._server_apply_damage(damage)
-			else:
-				# Fallback to take_damage if _server_apply_damage doesn't exist
-				body.take_damage(damage)
-			
-			# Sync destruction to all clients BEFORE queue_free
-			if multiplayer.multiplayer_peer != null:
-				# Ensure node is in tree and has valid path before calling RPC
-				if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
-					destroy_projectile.rpc()
-			queue_free()
-			return
+			if body_player_id != null and body_player_id != owner_peer_id:
+				# Check if hero is dead before checking invincibility
+				var is_dead = body.get("is_dead")
+				if is_dead == null or not is_dead:
+					# Check invincibility
+					var is_invincible = body.get("is_invincible")
+					if is_invincible == null or not is_invincible:
+						body.take_damage(damage)
+						# Sync destruction to all clients
+						if multiplayer.multiplayer_peer != null:
+							# Ensure node is in tree and has valid path before calling RPC
+							if is_inside_tree() and name != "" and get_parent() != null and get_parent().is_inside_tree():
+								destroy_projectile.rpc()
+						queue_free()
+						return
 
 @rpc("authority", "call_local", "reliable")
 func destroy_projectile():
